@@ -37,7 +37,7 @@ Wider stock prints only its central part: design 14–15 mm D-series tape as 12 
 | secondary | 22–28 | 600 |
 | floor, short strings only | 16–18 | 700 |
 
-- At most 3 sizes per label, Icon `fontSize` included, about 1.5–2× apart. On 12 mm tape the hero is 56–64. Weight 400 only at 24 px or more; never below 400.
+- At most 3 sizes per label, Icon `fontSize` included, about 1.5–2× apart. On 12 mm tape (96 px) a label is one hero word at 56–64 plus an optional icon or inverse block beside it, never a second line: two lines can't fit a 56 px hero; a longer word gets scaleX 0.8, then drops to 44 (on a split face, keep its box inside the face). Weight 400 only at 24 px or more; never below 400.
 - Caps at 16–24 px: `charSpacing` 50–100. No negative tracking under 32 px.
 - `lineHeight` 1–1.1 for caps, 1.15 for mixed case. `scaleX` 0.8–0.9 fits a long name on narrow tape.
 - `Textbox.width` is the wrap width: make it the column width and set `textAlign`. A word wider than `width` widens the box, so check `boxes`.
@@ -96,17 +96,15 @@ Each one renders with zero warnings. Change the words, keep the geometry, then r
 {"printer":"D110","width_mm":100,"height_mm":12,"split":"vertical","split_parts":2,"mirror":"copy","tail_pos":"right","tail_length_mm":40,"title":"Router WAN","objects":[
 {"type":"Rect","left":0,"top":0,"width":64,"height":96,"fill":"black","strokeWidth":0},
 {"type":"Icon","name":"router","left":12,"top":26,"fontSize":40,"fill":"white"},
-{"type":"Textbox","text":"ROUTER","left":76,"top":12,"width":152,"fontSize":36,"fontWeight":800,"textAlign":"left"},
-{"type":"Textbox","text":"WAN · PORT 1","left":76,"top":60,"width":152,"fontSize":20,"fontWeight":700,"textAlign":"left"}]}
+{"type":"Textbox","text":"WAN","left":76,"top":16,"width":152,"fontSize":56,"fontWeight":800,"textAlign":"left"}]}
 ```
 
-**Folder tab, D110 50×12:** inverse year block, caps category, title.
+**Folder tab, D110 50×12:** inverse year block, one hero word.
 ```json
 {"printer":"D110","width_mm":50,"height_mm":12,"title":"Insurance 2026","objects":[
 {"type":"Rect","left":0,"top":0,"width":96,"height":96,"fill":"black","strokeWidth":0},
 {"type":"Textbox","text":"2026","left":12,"top":33,"width":72,"fontSize":26,"fontWeight":800,"fill":"white"},
-{"type":"Textbox","text":"TAXES","left":108,"top":10,"width":280,"fontSize":18,"fontWeight":700,"charSpacing":100,"textAlign":"left"},
-{"type":"Textbox","text":"Insurance","left":108,"top":36,"width":280,"fontSize":44,"fontWeight":700,"textAlign":"left"}]}
+{"type":"Textbox","text":"Insurance","left":108,"top":16,"width":280,"fontSize":56,"fontWeight":700,"textAlign":"left"}]}
 ```
 
 **Price tag, B1 40×30:** condensed hero price, Code 128 with its quiet zones.
@@ -138,7 +136,7 @@ Each one renders with zero warnings. Change the words, keep the geometry, then r
 {"type":"Textbox","text":"Screwdrivers, pliers,\nhex keys, tape","left":16,"top":168,"width":352,"fontSize":24,"fontWeight":600,"lineHeight":1.15,"textAlign":"left"}]}
 ```
 
-**Small item, D110 30×12:** one word and one icon.
+**Small item, D110 30×12:** the pattern for any 12 mm tag: one word and one icon.
 ```json
 {"printer":"D110","width_mm":30,"height_mm":12,"title":"USB-C charger","objects":[
 {"type":"Icon","name":"cable","left":12,"top":21,"fontSize":48},
