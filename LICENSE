@@ -1,0 +1,49 @@
+Copyright (c) 2026 Nightious. All rights reserved.
+
+This software is source-available. It is NOT open source, and no open-source
+license is granted. "This repository" means
+https://github.com/Nightious-Tools/niimblue-mcp.
+
+You MAY:
+  - View and read the source code.
+  - Install and run unmodified copies of this software, using the install
+    methods described in this repository, for personal use or for internal
+    use within your business or organization. Commercial internal use, such
+    as by your own help desk team, is allowed.
+  - Contribute changes back to this repository through issues and pull
+    requests. By submitting a contribution you confirm you have the right to
+    submit it, and you grant the copyright holder a perpetual, worldwide,
+    irrevocable, royalty-free license to use, copy, modify, distribute, and
+    sublicense your contribution as part of this project.
+
+You MAY NOT, without prior written permission from the copyright holder:
+  - Copy, reproduce, or redistribute this code, in whole or in part, except
+    for copies made solely to install and run it as allowed above.
+  - Modify this code, except to prepare and test a pull request to this
+    repository.
+  - Publish, distribute, host, or otherwise make available a modified version
+    or any derivative work. A fork is permitted ONLY as the mechanism for
+    opening a pull request back to this repository.
+  - Incorporate this code, in whole or in part, into any other project,
+    product, or service, whether commercial or non-commercial.
+  - Offer this software, or access to it, as a service to anyone outside your
+    own business or organization.
+
+If you break any of these terms, your permission under this license ends.
+
+The copyright holder may change this license at any time. The current version
+is the LICENSE file on the default branch of this repository. It replaces
+earlier versions for all copies of this software, including copies of earlier
+releases, from the date it is published there.
+
+Bundled third-party components (NiimBlue, fabric, fonts and others) keep their
+own licenses and are NOT covered by this license; see THIRD_PARTY_NOTICES.md.
+NIIMBOT is a trademark of its owner. This project is not affiliated with or
+endorsed by NIIMBOT or the NiimBlue project.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
