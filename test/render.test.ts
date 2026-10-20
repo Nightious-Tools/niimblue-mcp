@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+import { PNG } from "pngjs";
+import jsQR from "jsqr";
+import { iconCodepoints } from "$/styles/mdi_icons";
+import { ExportedLabelTemplateSchema } from "$/types";
+import { renderLabel } from "../src/chrome.js";
+import { CHROME } from "./helpers.js";
+
+const B1: LabelProps = { printDirection: "top", size: { width: 384, height: 240 } };
+const LT = { originX: "left", originY: "top" };
+
+async function render(objects: object[], label: LabelProps = B1) {
+  const r = await renderLabel({ label, objects, dpmm: 8 });
+  const png = PNG.sync.read(Buffer.from(r.png_b64, "base64"));
+  const { width: W, height: H } = label.size;
+  const black = (x: number, y: number) => png.data[(y * r.zoom * png.width + x * r.zoom) * 4] === 0;
+  let ink = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) ink += +black(x, y);
+  return { ...r, png, black, ink, codes: r.warnings.map((w) => w.code) };
+}
+
+describe.skipIf(!CHROME && !process.env.CI)("page render (real Chrome)", () => {
+  it("returns a pure 1-bit PNG at zoom, and a canvas NiimBlue's own schema accepts", async () => {
+    const r = await render([{ type: "Rect", left: 10, top: 10, width: 100, height: 40 }]);
+    expect(r.zoom).toBe(3); // floor(1200/384)
+    expect([r.png.width, r.png.height]).toEqual([384 * 3, 240 * 3]);
+    for (let i = 0; i < r.png.data.length; i += 4) {
+      const [R, G, B, A] = r.png.data.subarray(i, i + 4);
+      if (!(R === G && G === B && (R === 0 || R === 255) && A === 255)) throw new Error(`pixel ${i / 4} is ${R},${G},${B},${A}`);
+    }
+    expect(ExportedLabelTemplateSchema.safeParse({ canvas: r.canvas, label: B1 }).success).toBe(true);
+    expect(r.boxes).toEqual([{ i: 0, type: "Rect", left: 10, top: 10, width: 103, height: 43 }]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("draws Rect stroke 3 and fabric 7 Polyline points where NiimBlue does", async () => {
+    const r = await render([
+      { type: "Rect", left: 10, top: 10, width: 100, height: 40 },
+      { type: "Polyline", points: [{ x: 10, y: 80 }, { x: 200, y: 80 }], strokeWidth: 2 },
+    ]);
+    for (const [x, y] of [[10, 10], [12, 30], [11, 52], [112, 10]]) expect(r.black(x, y), `${x},${y}`).toBe(true);
+    for (const [x, y] of [[9, 30], [13, 30], [20, 25], [113, 30], [11, 53]]) expect(r.black(x, y), `${x},${y}`).toBe(false);
+    for (const [x, y] of [[10, 79], [100, 80], [199, 79]]) expect(r.black(x, y), `${x},${y}`).toBe(true);
+    for (const [x, y] of [[100, 77], [100, 82], [8, 79], [202, 79]]) expect(r.black(x, y), `${x},${y}`).toBe(false);
+  });
+
+  it("places a Polyline axis from its points when only the other one is given", async () => {
+    const line = { type: "Polyline", ...LT, points: [{ x: 20, y: 100 }, { x: 200, y: 100 }], strokeWidth: 2 };
+    const r = await render([{ ...line, left: 20 }, { ...line, top: 150 }]);
+    expect(r.boxes.map((b) => [b.left, b.top])).toEqual([[20, 99], [19, 150]]);
+  });
+
+  it("puts a QR symbol at its box corner and jsQR decodes it", async () => {
+    const corner = await render([{ type: "QRCode", left: 8, top: 8, width: 84, text: "A" }]);
+    expect([corner.black(8, 8), corner.black(91, 8), corner.black(92, 8), corner.black(7, 8)]).toEqual([true, true, false, false]);
+    expect(corner.warnings).toEqual([]); // 8 px = 1 mm is not NEAR_EDGE; off-label counts as quiet
+    for (const width of [63, 105]) expect((await render([{ type: "QRCode", left: 100, top: 60, width, text: "A" }])).warnings, `${width}`).toEqual([]); // odd m·n: far-edge scan must start past the last module
+    const text = "https://inv.example.com/a/LT-0042";
+    const r = await render([{ type: "QRCode", left: 40, top: 40, width: 126, text }]);
+    expect(jsQR(new Uint8ClampedArray(r.png.data), r.png.width, r.png.height)?.data).toBe(text);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("renders Noto 700 text and a Material Icon with the bundled fonts, ink within their boxes", async () => {
+    const r = await render([
+      { type: "Textbox", ...LT, left: 16, top: 16, width: 240, text: "FLOUR Привет é", fontSize: 40, fontWeight: 700, fontFamily: "Noto Sans Variable" },
+      { type: "Textbox", ...LT, left: 16, top: 160, width: 240, text: "since {dt|YYYY}", fontSize: 24, fontWeight: 500, fontStyle: "italic" },
+      { type: "Text", ...LT, left: 280, top: 16, text: String.fromCodePoint(iconCodepoints.lan), fontSize: 64, fontFamily: "Material Icons", lineHeight: 1 },
+    ]);
+    expect(r.warnings).toEqual([]);
+    // ±2 px: Material Icons glyphs rise 2 px above fabric's line box at 64 px (the app draws them the same way)
+    const inBox = (x: number, y: number) => r.boxes.some((b) => x >= b.left - 2 && x < b.left + b.width + 2 && y >= b.top - 2 && y < b.top + b.height + 2);
+    let inside = 0, outside = 0;
+    for (let y = 0; y < 240; y++) for (let x = 0; x < 384; x++) if (r.black(x, y)) inBox(x, y) ? inside++ : outside++;
+    expect(outside).toBe(0);
+    expect((r.canvas as any).objects[1].text).toBe("since {dt|YYYY}"); // the link keeps the field; only the preview resolves it
+    const icon = r.boxes[2];
+    let iconInk = 0;
+    for (let y = icon.top; y < icon.top + icon.height; y++) for (let x = icon.left; x < icon.left + icon.width; x++) iconInk += +r.black(x, y);
+    expect(iconInk / (icon.width * icon.height)).toBeGreaterThan(0.2); // the glyph, not a fallback box or the ligature-less letters
+    expect(icon.width).toBeLessThan(70); // one 64 px glyph
+  });
+
+  it("fires every page warning code, and only it", async () => {
+    const qrText = "https://inv.example.com/a/LT-0042";
+    const cases: Array<[string, object[]]> = [
+      ["OFF_LABEL", [{ type: "Textbox", ...LT, left: 300, top: 100, width: 120, text: "EDGE", fontSize: 32 }]],
+      ["OFF_LABEL", [{ type: "Rect", left: 400, top: 10, width: 20, height: 20 }]],
+      ["NEAR_EDGE", [{ type: "Textbox", ...LT, left: 3, top: 100, width: 120, text: "EDGE", fontSize: 32 }]],
+      ["QR_ERR", [{ type: "QRCode", left: 40, top: 40, width: 42, text: "x".repeat(600) }]],
+      ["QR_MODULE_SMALL", [{ type: "QRCode", left: 40, top: 40, width: 60, text: qrText }]],
+      ["QR_QUIET_ZONE", [{ type: "QRCode", left: 40, top: 40, width: 126, text: qrText }, { type: "Rect", left: 172, top: 60, width: 4, height: 40, fill: "black", strokeWidth: 0 }]],
+      ["BARCODE_ERR", [{ type: "Barcode", left: 40, top: 40, height: 60, encoding: "EAN13", text: "12345abc" }]],
+      ["BARCODE_QUIET_ZONE", [{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "CODE128B", text: "AB-100" }, { type: "Rect", left: 44, top: 50, width: 4, height: 20, fill: "black", strokeWidth: 0 }]],
+    ];
+    const results = await Promise.all(cases.map(([, objects]) => render(objects)));
+    results.forEach((r, n) => expect(r.codes, cases[n][0]).toEqual([cases[n][0]]));
+    expect(results[0].warnings[0]).toMatchObject({ object: 0, message: expect.stringMatching(/move it inside/) });
+    // the clean twins stay silent
+    const clean = await Promise.all([
+      render([{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "CODE128B", text: "AB-100" }]),
+      render([{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "EAN13", text: "4006381333931" }]),
+    ]);
+    clean.forEach((r) => expect(r.warnings).toEqual([]));
+  });
+
+  it("mirror copy across a horizontal split doubles the ink", async () => {
+    const label: LabelProps = { printDirection: "left", size: { width: 320, height: 192 }, split: "horizontal", splitParts: 2 };
+    const text = [{ type: "Textbox", ...LT, left: 16, top: 16, width: 280, text: "NAS PSU", fontSize: 48, fontWeight: 700 }];
+    const [one, two] = await Promise.all([render(text, { ...label, mirror: "none" }), render(text, { ...label, mirror: "copy" })]);
+    expect(two.ink / one.ink).toBeGreaterThan(1.98);
+    expect(two.ink / one.ink).toBeLessThan(2.02);
+    expect(two.boxes).toHaveLength(1); // boxes are the input objects, not the mirrored clones
+  });
+});
