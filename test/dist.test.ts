@@ -15,9 +15,9 @@ describe.skipIf(!existsSync(DIST))("dist/index.mjs", () => {
     return client;
   };
 
-  it("lists the one tool", async () => {
+  it("lists the three tools", async () => {
     const client = await connect();
-    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["render_label"]);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(["render_label", "list_templates", "get_template"]);
     await client.close();
   });
 

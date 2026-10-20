@@ -16,6 +16,7 @@ The niimblue-mcp source itself is under [LICENSE](LICENSE).
 | eventemitter3 | 5.0.4 | MIT |
 | zod | 4.6.7 | MIT |
 | tslib | 2.8.1 | 0BSD |
+| d3-dsv | 3.0.1 | ISC |
 | crc-32 | 1.2.2 | Apache-2.0 |
 | @modelcontextprotocol/server | 2.3.1 | Apache-2.0 (MIT for unrelicensed contributions) |
 | @modelcontextprotocol/core | 2.3.1 | Apache-2.0 (MIT for unrelicensed contributions) |
@@ -302,6 +303,24 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
+```
+
+## d3-dsv 3.0.1 (ISC)
+
+```
+Copyright 2013-2021 Mike Bostock
+
+Permission to use, copy, modify, and/or distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright notice
+and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.
 ```
 
 ## crc-32 1.2.2 (Apache-2.0)

@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "niimblue-mcp",
   "display_name": "NiimBlue Labels",
-  "version": "1.0.0",
-  "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, and open them in NiimBlue to print.",
+  "version": "1.1.0",
+  "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, save fill-in templates, and open them in NiimBlue to print.",
   "author": { "name": "nightious", "url": "https://github.com/nightious" },
   "repository": { "type": "git", "url": "https://github.com/Nightious-Tools/niimblue-mcp.git" },
   "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
@@ -17,7 +17,8 @@
       "args": ["${__dirname}/dist/index.mjs"],
       "env": {
         "NIIMBLUE_CHROME": "${user_config.chrome_path}",
-        "NIIMBLUE_APP_URL": "${user_config.app_url}"
+        "NIIMBLUE_APP_URL": "${user_config.app_url}",
+        "NIIMBLUE_TEMPLATES_DIR": "${user_config.templates_dir}"
       }
     }
   },
@@ -35,6 +36,13 @@
       "description": "The NiimBlue web app the label link opens (http or https).",
       "required": false,
       "default": "https://niim.blue/"
+    },
+    "templates_dir": {
+      "type": "directory",
+      "title": "Templates folder",
+      "description": "Where render_label save_as writes label templates. Leave empty for Documents/NiimBlue Templates in your home folder.",
+      "required": false,
+      "default": ""
     }
   },
   "compatibility": {

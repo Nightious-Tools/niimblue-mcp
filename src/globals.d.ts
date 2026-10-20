@@ -19,11 +19,17 @@ type LabelProps = {
   mirror?: "none" | "copy" | "flip";
 };
 
-/** What label.ts hands the page: px label props, fabric object JSON in paint order, dots per mm. */
-type PageInput = { label: LabelProps; objects: object[]; dpmm: number };
+/** What label.ts hands the page: px label props, fabric object JSON in paint order, dots per mm, rows[0] for the {key} fields. */
+type PageInput = { label: LabelProps; objects: object[]; dpmm: number; variables?: Record<string, string> };
 
 type RenderWarning = { code: string; object?: number; message: string };
 type RenderBox = { i: number; type: string; left: number; top: number; width: number; height: number };
 
 /** What `niimRender` returns: the upscaled threshold-140 PNG, NiimBlue's own `toJSON()` canvas, rendered boxes, page warnings. */
 type PageResult = { png_b64: string; canvas: object; boxes: RenderBox[]; warnings: RenderWarning[]; zoom: number };
+
+/** d3-dsv 3 ships no types; the two calls NiimBlue's PrintPreview.svelte makes. */
+declare module "d3-dsv" {
+  export function csvFormat(rows: object[]): string;
+  export function csvParse(text: string): Array<Record<string, string>> & { columns: string[] };
+}

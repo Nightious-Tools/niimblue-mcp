@@ -5,13 +5,29 @@ description: 'Design NIIMBOT labels with the niimblue MCP and hand them to NiimB
 
 # niimblue
 
-`render_label` returns the exact 1-bit image NiimBlue prints, plus a link that opens the label in NiimBlue. Nothing prints until the user clicks Print there.
+`render_label` returns the exact 1-bit image NiimBlue prints, plus a link that opens the label in NiimBlue. Nothing prints until the user clicks Print there. `list_templates` and `get_template` read saved templates and NiimBlue exports.
 
 ## Flow
 
 1. Know the printer model and the label stock in mm. If the user didn't say, don't stop to ask: assume a common stock (B1 or B21 on 50×30, drawn 48×30; D11 or D110 on 40×12; no printer named: B1), render, and say what you assumed so they can correct it.
 2. Start from the closest recipe below, then `render_label`. Look at the PNG, read every warning (each ends with its fix) and `boxes`. Fix and render again; 2–3 rounds is normal.
 3. Final render: `include_json: true` and a `title`. Give the user the link and say: "Save any label open in NiimBlue, open the link, click OK, then Print."
+
+## Recreate from a photo
+
+- Pick the stock by aspect ratio: 4:1 is D101 100×24; a B-series 48×12, or rotate the design onto B-series stock. Say what you picked.
+- Scale the photo's coordinates to dots (`width_mm` × dpmm across), then fix the result against the PNG and `boxes`.
+- Coloured or tinted panels become inverse black with white text. A monospace face becomes Noto caps with `charSpacing` 20–50.
+- Chevrons, arrows and logo marks: a `Polyline` with `fill: "black"` and `stroke: "transparent"`, its points tracing the outline (closed implicitly). Or an Icon (`chevron_right`, `arrow_forward_ios`).
+- `TEXT_WRAPPED` means a line broke where the photo has none: widen the box as the warning says.
+
+## Templates
+
+1. Put a `{key}` field wherever a value changes (batch, date, name) and pass `rows: [{"key": "value"}]`. The preview shows row 1.
+2. Render with `save_as: "<name>"`. It writes `<name>.args.json` and `<name>.niimblue.json` (importable from NiimBlue's Saved labels) to the templates folder, and returns their paths in `saved`. An existing name is refused: ask the user before you retry with `overwrite: true`.
+3. Later: `list_templates` for the names and their fields, then `render_label {"template": "<name>", "rows": [...]}`. Args you pass override the template's; `objects` and `rows` replace it wholesale. To edit one, `get_template {"name": "<name>"}`, change the args, render, and save again.
+4. One row: the link carries the filled text. More rows: NiimBlue prints one label per row from its CSV, and the link replaces the CSV the user has open in NiimBlue: tell them.
+5. To edit a label made in NiimBlue: the user exports it (Saved labels → Export); `get_template {"path": "<file>.json", "printer": "<model>"}` returns its args. Images, ArUco markers, paths and groups can't be converted; read `notes` for anything dropped.
 
 ## Printers and stock
 
@@ -67,7 +83,7 @@ Wider stock prints only its central part: design 14–15 mm D-series tape as 12 
 - Cables and tech: `power` `electrical_services` `cable` `lan` `router` `wifi` `usb` `settings_ethernet` `dns` `storage` `memory` `bolt` `battery_full` `tv` `laptop` `print`
 - Office: `folder` `description` `receipt_long` `savings` `account_balance` `work` `school` `medical_services` `medication` `event`
 - Storage and home: `build` `handyman` `construction` `hardware` `inventory_2` `category` `checkroom` `toys` `pets` `yard` `cleaning_services` `garage` `key` `lock`
-- Signs: `warning` `priority_high` `block` `recycling` `local_shipping` `sell` `arrow_forward` `arrow_back`
+- Signs: `warning` `priority_high` `block` `recycling` `local_shipping` `sell` `arrow_forward` `arrow_back` `chevron_right` `arrow_forward_ios`
 
 ## Recipes
 
@@ -136,6 +152,32 @@ Each one renders with zero warnings. Change the words, keep the geometry, then r
 {"type":"Textbox","text":"Screwdrivers, pliers,\nhex keys, tape","left":16,"top":168,"width":352,"fontSize":24,"fontWeight":600,"lineHeight":1.15,"textAlign":"left"}]}
 ```
 
+**Product label, D101 100×24, a template:** frame, hero letter with a filled chevron, an inverse info panel whose batch, expiry and barcode fill from `rows`. Render it with `save_as` to reuse it.
+```json
+{"printer":"D101","width_mm":100,"height_mm":24,"title":"HGT-R.001","objects":[
+{"type":"Rect","left":8,"top":8,"width":784,"height":176,"rx":12,"strokeWidth":3},
+{"type":"Rect","left":520,"top":8,"width":272,"height":176,"rx":12,"fill":"black","strokeWidth":0},
+{"type":"Textbox","text":"H","left":28,"top":20,"width":110,"fontSize":140,"fontWeight":900,"textAlign":"left"},
+{"type":"Polyline","points":[{"x":144,"y":62},{"x":160,"y":62},{"x":184,"y":93},{"x":160,"y":124},{"x":144,"y":124},{"x":168,"y":93}],"fill":"black","stroke":"transparent"},
+{"type":"Polyline","points":[{"x":200,"y":18},{"x":200,"y":174}],"strokeWidth":2},
+{"type":"Textbox","text":"HGT–R.001","left":214,"top":10,"width":270,"fontSize":54,"fontWeight":700,"textAlign":"left","scaleX":1.05},
+{"type":"Textbox","text":"RESEARCH USE ONLY","left":218,"top":74,"width":290,"fontSize":17,"fontWeight":500,"charSpacing":20,"textAlign":"left"},
+{"type":"Textbox","text":"NOT FOR HUMAN CONSUMPTION","left":218,"top":96,"width":290,"fontSize":17,"fontWeight":500,"charSpacing":20,"textAlign":"left"},
+{"type":"Polyline","points":[{"x":206,"y":132},{"x":508,"y":132}],"strokeWidth":2},
+{"type":"Textbox","text":"5 MG","left":220,"top":148,"width":80,"fontSize":17,"fontWeight":500,"charSpacing":20,"textAlign":"left"},
+{"type":"Textbox","text":"LYOPHILIZED POWDER","left":300,"top":148,"width":208,"fontSize":17,"fontWeight":500,"charSpacing":20,"textAlign":"right"},
+{"type":"Textbox","text":"BATCH","left":536,"top":16,"width":110,"fontSize":18,"fontWeight":600,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Textbox","text":"{batch}","left":536,"top":36,"width":120,"fontSize":20,"fontWeight":700,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Textbox","text":"EXP","left":672,"top":16,"width":108,"fontSize":18,"fontWeight":600,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Textbox","text":"{exp}","left":672,"top":36,"width":108,"fontSize":20,"fontWeight":700,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Polyline","points":[{"x":532,"y":68},{"x":780,"y":68}],"stroke":"white","strokeWidth":2},
+{"type":"Textbox","text":"STORE","left":536,"top":74,"width":110,"fontSize":18,"fontWeight":600,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Textbox","text":"-20°C","left":536,"top":94,"width":110,"fontSize":20,"fontWeight":700,"charSpacing":50,"fill":"white","textAlign":"left"},
+{"type":"Rect","left":522,"top":124,"width":270,"height":56,"rx":6,"fill":"white","strokeWidth":0},
+{"type":"Barcode","text":"{code}","encoding":"CODE128B","left":544,"top":132,"height":40,"scaleFactor":2,"printText":false}],
+"rows":[{"batch":"25R-0417","exp":"04/2027","code":"25R0417"}]}
+```
+
 **Small item, D110 30×12:** the pattern for any 12 mm tag: one word and one icon.
 ```json
 {"printer":"D110","width_mm":30,"height_mm":12,"title":"USB-C charger","objects":[
@@ -147,5 +189,5 @@ Each one renders with zero warnings. Change the words, keep the geometry, then r
 
 - Only Noto Sans Variable (Latin and Cyrillic) and Material Icons travel in the link. Latin Extended (ł ř ő ş), arrows such as →, and emoji fall back to another font on the user's machine: write `-` or use an `Icon` (`arrow_forward`).
 - The link replaces the label open in NiimBlue after a confirm: tell the user to save first.
-- `{dt}`, `{dt|DD.MM.YYYY}` and `{dt+7d|DD.MM}` resolve when the label prints, not when you design it. Any other `{name}` prints literally.
+- `{dt}`, `{dt|DD.MM.YYYY}` and `{dt+7d|DD.MM}` resolve when the label prints, not when you design it. Any other `{key}` fills from `rows`; without a value it prints literally (`UNFILLED_FIELD`).
 - Only `black`, `white` and `transparent` exist; anything grey or anti-aliased thresholds to black or white at 140.

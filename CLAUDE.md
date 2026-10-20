@@ -1,15 +1,18 @@
 # niimblue-mcp
 
-MCP stdio server with one read-only tool, `render_label`. `src/label.ts` turns the input into NiimBlue
-label props and objects (pure, no Chrome). `src/chrome.ts` runs the bundled page (`src/page/render.ts`,
+MCP stdio server with three tools: `render_label`, and the read-only `list_templates` and
+`get_template`. `src/label.ts` turns the input into NiimBlue label props and objects (pure, no Chrome). `src/chrome.ts` runs the bundled page (`src/page/render.ts`,
 NiimBlue's own fabric code at the pinned sha) in headless Chrome or Edge over `--remote-debugging-pipe`
 and gets back the threshold-140 PNG, NiimBlue's canvas JSON, boxes and page warnings. `src/server.ts`
-builds the `#load=` link (gzip, standard base64) and registers the tool.
+builds the `#load=` link (gzip, standard base64) and registers the tools. `src/templates.ts` is the template
+store (`save_as`) and converts NiimBlue `.json` exports into `render_label` args.
 
 ## Rules
 
-- Never print, never talk to a printer, never write files (except Chrome's temp profile,
-  removed after each render). The hand-off is the link.
+- Never print, never talk to a printer. The hand-off is the link.
+- Write only `save_as` template files under `NIIMBLUE_TEMPLATES_DIR` (and Chrome's temp profile, removed
+  after each render), and never replace one without `overwrite: true`. Template names are slugged to
+  Unicode letters, marks and digits, so no name leaves the folder; a name with none is `BAD_INPUT`.
 - Logs to stderr only; stdout is the MCP transport.
 - The page loads nothing external. That is the only reason the always-on `--no-sandbox` is acceptable:
   revisit it before allowing images or URLs.
@@ -52,7 +55,7 @@ have no Chrome: then every render returns `CHROME_NOT_FOUND`, which is expected,
 | a warning or error code | where it is raised, `README.md`, SKILL.md if it changes advice |
 | plugin name `niimblue-mcp` | `package.json`, both `marketplace.json`, both `plugin.json`, `manifest.json`, README |
 | server name `niimblue` | `SERVER_NAME`, `.mcp.json`, `.claude-plugin/plugin.json`, `opencode.json`, README snippets, the eval `--allow-tools` pattern |
-| an env var | `src/config.ts`, `.env.example`, README table, `manifest.json` `user_config` + `mcp_config.env` (`NIIMBLUE_CHROME`, `NIIMBLUE_APP_URL` only) |
+| an env var | `src/config.ts`, `.env.example`, README table, `manifest.json` `user_config` + `mcp_config.env` (`NIIMBLUE_CHROME`, `NIIMBLUE_APP_URL`, `NIIMBLUE_TEMPLATES_DIR`; not `NIIMBLUE_LOG_LEVEL`) |
 | NiimBlue sha bump | the `niimblue` git sha in `package.json`, plus the six exact pins (`fabric`, `qrcode-generator`, `dayjs`, `@fontsource-variable/noto-sans`, `material-icons`, `@mmote/niimbluelib`) copied from upstream's `package-lock.json` at that sha; `npx -y npm@11 install`; `npm test`; `npm run build`; regenerate THIRD_PARTY_NOTICES.md; rerun the app-vs-render parity check (F1) |
 | Code128B guard | delete the `$`/`)` `BAD_INPUT` guard in `src/label.ts` (and its test, README, SKILL.md) once upstream fixes `src/utils/barcode.ts:88,93` |
 | a bundled package | THIRD_PARTY_NOTICES.md (full license text) |
@@ -75,7 +78,8 @@ GitHub user `nightious` (`gh auth switch -u nightious`).
 
 `npm test` is offline. Render tests need Chrome or Edge: locally they skip without one, under `CI=true`
 they fail instead. Bundle: copy `dist/index.mjs` alone to an empty dir, pipe `initialize` + `tools/list`
-into `node index.mjs`; expect 1 tool. Live: `npm run inspect`, call `render_label` with
+into `node index.mjs`; expect 3 tools. Keep stdin open until the replies arrive: EOF stops the server
+mid-render. Live: `npm run inspect`, call `render_label` with
 `{"printer":"D110","width_mm":40,"height_mm":12,"objects":[{"type":"Textbox","text":"Hello","left":8,"top":8,"width":296,"fontSize":48}]}`,
 then open the link and compare NiimBlue's print preview with the PNG.
 
@@ -95,7 +99,8 @@ Skill: `claude plugin eval . --mocks off --allow-real-servers --allow-tools "mcp
   that throws, so the bundle includes `@capacitor/*`.
 - NiimBlue's `font.scss` ships only the Latin and Cyrillic subsets of Noto Sans and no italic. Anything
   else falls back per machine, which is why `GLYPH_FALLBACK` exists.
-- `canvasPreprocess` leaves unknown `{name}` fields printed literally: only `{dt…}` works in a link.
+- `canvasPreprocess` fills `{dt…}` at print time and `{key}` from `rows` (1 row: filled before the link;
+  more: NiimBlue's CSV). A key with no value prints literally (`UNFILLED_FIELD`). `$times` is not supported.
 - fabric 7 defaults origins to center; `label.ts` sets left/top explicitly.
 - The app doesn't preload fonts before `#load`, so its first layout of a linked label can differ from
   ours. Not fixable here.

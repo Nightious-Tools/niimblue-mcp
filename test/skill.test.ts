@@ -15,8 +15,8 @@ describe("SKILL.md", () => {
     expect(fm).toMatch(/^description: '(?:[^']|'')+'$/m); // unquoted ": " silently drops the skill
   });
 
-  it("has 8 recipes the schema accepts", () => {
-    expect(recipes).toHaveLength(8);
+  it("has 9 recipes the schema accepts", () => {
+    expect(recipes).toHaveLength(9);
     for (const r of recipes) expect(InputSchema.safeParse(r).error).toBeUndefined();
   });
 

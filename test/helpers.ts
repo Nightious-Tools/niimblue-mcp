@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadConfig, type Config } from "../src/config.js";
 import { findChrome } from "../src/chrome.js";
 
@@ -5,7 +7,7 @@ import { findChrome } from "../src/chrome.js";
 export const CHROME = (() => { try { return findChrome(process.env); } catch { return undefined; } })();
 
 export function testConfig(over: Partial<Config> = {}): Config {
-  return { ...loadConfig({}), logLevel: "silent", ...over };
+  return { ...loadConfig({}), logLevel: "silent", templatesDir: join(tmpdir(), "niimblue-test-templates-unused"), ...over }; // never the real ~/Documents
 }
 
 /** 1×1 black PNG. */

@@ -3,11 +3,12 @@ import { z } from "zod";
 import { loadConfig, type Config } from "./config.js";
 import { Logger } from "./util/log.js";
 import { NbError } from "./util/errors.js";
-import { InputSchema, makeLink, makeTemplate, prepare } from "./label.js";
+import { InputSchema, MODELS, ToolSchema, fieldKeys, makeLink, makeTemplate, prepare } from "./label.js";
 import { renderLabel } from "./chrome.js";
+import { importExport, listTemplates, loadTemplate, saveTemplate, slug } from "./templates.js";
 
 export const SERVER_NAME = "niimblue";
-export const SERVER_VERSION = "1.0.0";
+export const SERVER_VERSION = "1.1.0";
 const TOOL = "render_label";
 
 export const INSTRUCTIONS = `Designs labels for NIIMBOT thermal printers and hands them to NiimBlue (niim.blue) to print. render_label renders NiimBlue's own exact 1-bit print preview (PNG) and returns an open-in-NiimBlue link. This server never prints.
@@ -31,7 +32,11 @@ Colours are black, white or transparent; greys and anti-aliasing threshold to 1-
 
 Fonts: only Noto Sans Variable (Latin and Cyrillic, weights 100–900) and Material Icons survive the link. Other characters fall back to a system font and print differently on the user's machine.
 
-Look: one hero line, at most 3 sizes (icons count), inverse bands and weight for hierarchy rather than nested boxes.`;
+Look: one hero line, at most 3 sizes (icons count), inverse bands and weight for hierarchy rather than nested boxes.
+
+From a photo: pick stock by aspect ratio (4:1 → D101 100×24; B-series 48×12, or rotate), scale coordinates to dots, tints → inverse black, monospace → Noto caps + charSpacing, arrows → a filled Polyline.
+
+Templates: put {key} fields in the text and pass rows (one object per label). render_label save_as stores the args; list_templates shows them; render_label {template, rows} reprints with new values. More than one row puts them in NiimBlue's CSV (replacing the user's open CSV): say so. get_template returns saved args, or converts a NiimBlue .json export (path + printer) to edit.`;
 
 const BOX = { left: z.number().int(), top: z.number().int(), width: z.number().int(), height: z.number().int() };
 const OutputSchema = z.object({
@@ -43,6 +48,22 @@ const OutputSchema = z.object({
   link_chars: z.number().int(),
   boxes: z.array(z.object({ i: z.number().int().describe("Index into objects"), type: z.string(), ...BOX })).describe("Rendered bounding boxes in dots, after auto-size"),
   warnings: z.array(z.object({ code: z.string(), object: z.number().int().optional(), message: z.string() })).max(30),
+  saved: z.object({ args_path: z.string(), niimblue_path: z.string() }).optional().describe("save_as: the template files written"),
+});
+const ListOutput = z.object({
+  ok: z.literal(true), tool: z.literal("list_templates"), dir: z.string(),
+  templates: z.array(z.object({ name: z.string(), title: z.string().optional(), printer: z.string().optional(), width_mm: z.number().optional(), height_mm: z.number().optional(),
+    fields: z.array(z.string()).optional().describe("{key} fields rows must fill"), rows: z.number().int().optional(), modified: z.string(), error: z.string().optional() })),
+});
+const GetInput = z.object({
+  name: z.string().min(1).max(60).optional().describe("Saved template name (list_templates)"),
+  path: z.string().min(1).max(1000).optional().describe("Or: a NiimBlue .json label export to convert (Saved labels → Export, or a saved .niimblue.json)"),
+  printer: z.enum(MODELS).optional().describe("With path: the printer to convert for (dots per mm); the export doesn't name one"),
+}).strict();
+const GetOutput = z.object({
+  ok: z.literal(true), tool: z.literal("get_template"),
+  args: z.record(z.string(), z.unknown()).describe("render_label args: edit them and render"),
+  notes: z.array(z.string()).describe("What the conversion dropped or changed"),
 });
 
 export interface Deps { cfg?: Config; logger?: Logger; render?: typeof renderLabel }
@@ -66,6 +87,8 @@ export function createServer(deps: Deps = {}): McpServer {
     }
   };
 
+  const json = <T extends object>(out: T): CallToolResult => ({ content: [{ type: "text", text: JSON.stringify(out) }], structuredContent: out as Record<string, unknown> });
+
   server.registerTool(
     TOOL,
     {
@@ -77,26 +100,62 @@ export function createServer(deps: Deps = {}): McpServer {
         "Floors at 203 dpi (×dpmm/8 at 300 dpi): text ≥16 px; weight ≥500 under 24 px; strokes ≥2 px; QR modules ≥3 px with 4 clear modules; Code 128 scaleFactor ≥2 with 10 clear modules; text and codes ≥1 mm from the edges. " +
         "Colours: black, white, transparent. Only Noto Sans Variable (Latin, Cyrillic) + Material Icons survive the link. " +
         "Fix every warning and render again. Final call: include_json, for the .json export. " +
-        "The link replaces the label open in NiimBlue after a confirm: tell the user to save it first.",
-      inputSchema: InputSchema,
+        "The link replaces the label open in NiimBlue after a confirm: tell the user to save it first. " +
+        "{key} fields fill from rows (preview: row 1; more than 1 row travels as NiimBlue's CSV, one label per row). " +
+        "save_as writes the args and an importable .niimblue.json to the templates folder; template starts from saved args.",
+      inputSchema: ToolSchema,
       outputSchema: OutputSchema,
-      annotations: { title: "Render NiimBlue label", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: "Render NiimBlue label", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async (a, ctx) => guard(TOOL, async () => {
+    async ({ template: base, save_as, overwrite, ...given }, ctx) => guard(TOOL, async () => {
+      const parsed = InputSchema.safeParse(base ? { ...(await loadTemplate(cfg.templatesDir, base)), ...given } : given);
+      if (!parsed.success) throw new NbError("BAD_INPUT", `${parsed.error.issues.slice(0, 10).map((e) => `${e.path.join(".") || "args"}: ${e.message}`).join("\n")}\nFix these args${base ? ` (template '${base}' supplies the rest)` : ""}.`);
+      const a = parsed.data;
       const { label, input, warnings } = prepare(a);
       const r = await render(input, ctx.mcpReq.signal);
-      const template = makeTemplate(input.label, r.canvas, a.title);
+      const rows = fieldKeys(a.objects).length ? a.rows : undefined; // rows no field uses would still replace the user's CSV and print N copies
+      const template = makeTemplate(input.label, r.canvas, a.title, rows);
       const link = makeLink(cfg.appUrl, template);
+      const { include_json, rows: _, ...keep } = a;
+      const saved = save_as ? await saveTemplate(cfg.templatesDir, save_as, rows ? { ...keep, rows } : keep, makeTemplate(input.label, r.canvas, a.title, rows, true), overwrite) : undefined;
       const out: z.infer<typeof OutputSchema> = { ok: true, tool: TOOL, label, zoom: r.zoom, link, link_chars: link.length,
         boxes: r.boxes.map((b) => ({ ...b, type: a.objects[b.i]?.type ?? b.type })), // the page reports an Icon as fabric's "Text"
-        warnings: [...warnings, ...r.warnings].slice(0, 30) };
+        warnings: [...warnings, ...r.warnings].slice(0, 30), ...(saved ? { saved } : {}) };
       const content: CallToolResult["content"] = [{ type: "image", data: r.png_b64, mimeType: "image/png" }, { type: "text", text: JSON.stringify(out) }];
-      if (a.include_json) content.push({ type: "resource", resource: { uri: `niimblue://label/${slug(a.title)}.json`, mimeType: "application/json", text: JSON.stringify(template, null, 2) } });
+      if (include_json) content.push({ type: "resource", resource: { uri: `niimblue://label/${slug(a.title) || "label"}.json`, mimeType: "application/json", text: JSON.stringify(template, null, 2) } });
       return { content, structuredContent: out };
+    }),
+  );
+
+  server.registerTool(
+    "list_templates",
+    {
+      title: "List saved label templates",
+      description: "List the templates render_label save_as stored: name (pass it as render_label template or get_template name), title, printer, size in mm, the {key} fields rows must fill, row count, last modified.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: ListOutput,
+      annotations: { title: "List saved label templates", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async () => guard("list_templates", async () => json({ ok: true as const, tool: "list_templates" as const, dir: cfg.templatesDir, templates: await listTemplates(cfg.templatesDir) })),
+  );
+
+  server.registerTool(
+    "get_template",
+    {
+      title: "Get label template args",
+      description: "Return render_label args to edit: a saved template by name, or a NiimBlue .json label export (path + printer) converted to objects and rows. " +
+        "Images, ArUco markers, paths and groups can't be converted (BAD_INPUT); notes lists what else was dropped.",
+      inputSchema: GetInput,
+      outputSchema: GetOutput,
+      annotations: { title: "Get label template args", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ name, path, printer }) => guard("get_template", async () => {
+      if (!name === !path) throw new NbError("BAD_INPUT", "Pass either name (a saved template) or path (a NiimBlue .json export), not both or neither.");
+      if (path && !printer) throw new NbError("BAD_INPUT", "path needs printer: the export doesn't say which printer it is for; pass the model, e.g. D110 or B1.");
+      const r = path ? await importExport(path, printer!) : { args: await loadTemplate(cfg.templatesDir, name!), notes: [] };
+      return json({ ok: true as const, tool: "get_template" as const, args: r.args, notes: r.notes });
     }),
   );
 
   return server;
 }
-
-const slug = (t?: string) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "label";

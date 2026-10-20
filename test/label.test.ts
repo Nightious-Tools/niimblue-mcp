@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { ExportedLabelTemplateSchema } from "$/types";
-import { InputSchema, prepare, makeTemplate, makeLink, NOT_IN_FONT, MODELS, type LabelArgs } from "../src/label.js";
+import { InputSchema, prepare, makeTemplate, makeLink, toCsv, NOT_IN_FONT, MODELS, type LabelArgs } from "../src/label.js";
 import { NbError } from "../src/util/errors.js";
 
 const run = (printer: string, width_mm: number, height_mm: number, objects: LabelArgs["objects"], extra: Partial<LabelArgs> = {}) =>
@@ -100,6 +100,39 @@ describe("objects", () => {
     expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: [{ ...rect[0], foo: 1 }] }).success).toBe(false);
     expect(InputSchema.safeParse({ printer: "D999", width_mm: 40, height_mm: 12, objects: rect }).success).toBe(false);
     expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: rect, x: 1 }).success).toBe(false);
+  });
+});
+
+describe("rows", () => {
+  const two = text("{a} {b}");
+  it("UNFILLED_FIELD only for a key no row has, naming the keys", () => {
+    expect(run("D110", 40, 12, two, { rows: [{ a: "1" }, { a: "2", b: "x" }] }).warnings).toEqual([]);
+    expect(run("D110", 40, 12, two, { rows: [{ a: "1" }] }).warnings).toEqual([{ code: "UNFILLED_FIELD", object: 0, message: expect.stringContaining("rows has only a") }]);
+  });
+  it("the page gets row 1 as NiimBlue's CSV gives it: a key row 1 lacks is empty", () => {
+    expect(run("D110", 40, 12, two, { rows: [{ a: "1" }, { a: "2", b: "x" }] }).input.variables).toEqual({ a: "1", b: "" });
+    expect(run("D110", 40, 12, two).input.variables).toBeUndefined();
+  });
+  it("rejects dt and $times as keys", () => {
+    for (const k of ["dt", "$times"]) expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: two, rows: [{ [k]: "1" }] }).success).toBe(false);
+  });
+  it("GLYPH_FALLBACK checks every row's value", () => expect(codes(run("D110", 40, 12, text("{a}"), { rows: [{ a: "ok" }, { a: "→" }] }))).toEqual(["GLYPH_FALLBACK"]));
+  it("1 row fills the link text; more keep the fields and carry PrintPreview's CSV", () => {
+    const canvas = { version: "7.4.0", objects: [{ type: "Textbox", text: "{a} {b} {dt}" }, { type: "Rect" }] };
+    const label: LabelProps = { printDirection: "left", size: { width: 320, height: 96 } };
+    const one: any = makeTemplate(label, canvas, undefined, [{ a: "1", b: "2" }]);
+    expect(one.canvas.objects[0].text).toBe("1 2 {dt}");
+    expect(one.csv).toBeUndefined();
+    const rows = [{ a: "x,y", b: 'say "hi"' }, { a: "l1\nl2", b: "" }];
+    const many: any = makeTemplate(label, canvas, undefined, rows);
+    expect(many.canvas.objects[0].text).toBe("{a} {b} {dt}");
+    expect(many.csv.data).toBe(toCsv(rows));
+    expect(toCsv(rows)).toBe('a,b\n"x,y","say ""hi"""\nl1\\nl2,');
+    expect(ExportedLabelTemplateSchema.safeParse(many).error).toBeUndefined();
+  });
+  it("Polyline fill passes through", () => {
+    const o = run("D110", 40, 12, [{ type: "Polyline", points: [{ x: 8, y: 8 }, { x: 40, y: 48 }, { x: 8, y: 88 }], fill: "black", stroke: "transparent" }]).input.objects[0];
+    expect(o).toMatchObject({ type: "Polyline", fill: "black", stroke: "transparent" });
   });
 });
 

@@ -26,7 +26,7 @@ const TEXT = new Set(["Textbox", "Text"]);
 const VECTOR = new Set(["Rect", "Circle", "Polyline"]);
 const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print settings
 
-(globalThis as any).niimRender = async ({ label, objects, dpmm }: PageInput): Promise<PageResult> => {
+(globalThis as any).niimRender = async ({ label, objects, dpmm, variables }: PageInput): Promise<PageResult> => {
   await fontsReady;
   const merged = objects.map((o: any) => {
     const m: any = { ...(TEXT.has(o.type) ? OBJECT_DEFAULTS_TEXT : VECTOR.has(o.type) ? OBJECT_DEFAULTS_VECTOR : OBJECT_DEFAULTS), ...o };
@@ -54,7 +54,7 @@ const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print
   c2.setHighlightMirror(false);
   c2.setLabelProps(label as any);
   await c2.loadFromJSON(canvas);
-  canvasPreprocess(c2, {});
+  canvasPreprocess(c2, variables ?? {});
   const objs = c2.getObjects(); // before mirroring, so index i = input order
   await c2.createMirroredObjects();
   c2.requestRenderAll();
@@ -79,6 +79,14 @@ const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print
     else if (content && over > 0) warn("OFF_LABEL", i, `${type} extends ${over} px past the label edge (${W}×${H} px); move it inside or make it smaller.`);
     else if (content && gap < dpmm) warn("NEAR_EDGE", i, `${type} is ${gap} px from the label edge; keep text and codes ≥ ${Math.ceil(dpmm)} px (1 mm) from every edge.`);
 
+    if (o instanceof fabric.Textbox && o.textLines.length > o.text.split("\n").length) { // wrapped at width, not at an explicit \n
+      const w0 = o.width;
+      o.set({ width: 1e5 }); o.initDimensions();
+      const need = Math.ceil(o.calcTextWidth());
+      o.set({ width: w0 }); o.initDimensions();
+      warn("TEXT_WRAPPED", i, `Textbox wraps to ${o.textLines.length} lines at width ${Math.round(w0)} px; widen it to ≥ ${need} px or put \\n where you want the break.`);
+    }
+
     const angle0 = (o.angle ?? 0) % 360 === 0; // shortcut: quiet-zone scans only for unrotated codes, rotate-aware rects if agents rotate codes
     const c = o.getCenterPoint();
     if (o instanceof QRCode) { // same maths as QRCode._render
@@ -101,8 +109,10 @@ const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print
         const s = o.scaleFactor, q = 10 * s, ox = c.x - o.width / 2 + 0.5, oy = c.y - o.height / 2 + 0.5;
         const x0 = Math.floor(ox + (o.encoding === "EAN13" ? b._measureLetterWidth() : 0)), x1 = Math.ceil(x0 + s * b.barcodeEncoded.length);
         const bars = o.height - (o.printText ? o.fontSize * 1.2 : o.encoding === "EAN13" ? 8 : 0), y0 = Math.floor(oy), y1 = Math.ceil(oy + bars);
-        if (anyBlack(x0 - q, x0, y0, y1) || anyBlack(x1, x1 + q, y0, y1))
-          warn("BARCODE_QUIET_ZONE", i, `Black within 10 modules (${q} px) left or right of the bars; keep ${q} px clear on both sides.`);
+        // clear columns beside the bars, up to the q a scanner needs
+        const clear = (x: number, step: number) => { let d = 0; while (d < q && !anyBlack(x + d * step, x + d * step + 1, y0, y1)) d++; return d; };
+        for (const [side, d] of [["left", clear(x0 - 1, -1)], ["right", clear(x1, 1)]] as const)
+          if (d < q) warn("BARCODE_QUIET_ZONE", i, `Only ${d} px clear ${side} of the bars, under 10 modules (${q} px); keep ${q} px clear on the ${side}.`);
       }
     }
     return box;

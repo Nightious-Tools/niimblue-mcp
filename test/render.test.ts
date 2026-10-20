@@ -9,8 +9,8 @@ import { CHROME } from "./helpers.js";
 const B1: LabelProps = { printDirection: "top", size: { width: 384, height: 240 } };
 const LT = { originX: "left", originY: "top" };
 
-async function render(objects: object[], label: LabelProps = B1) {
-  const r = await renderLabel({ label, objects, dpmm: 8 });
+async function render(objects: object[], label: LabelProps = B1, variables?: Record<string, string>) {
+  const r = await renderLabel({ label, objects, dpmm: 8, variables });
   const png = PNG.sync.read(Buffer.from(r.png_b64, "base64"));
   const { width: W, height: H } = label.size;
   const black = (x: number, y: number) => png.data[(y * r.zoom * png.width + x * r.zoom) * 4] === 0;
@@ -63,7 +63,7 @@ describe.skipIf(!CHROME && !process.env.CI)("page render (real Chrome)", () => {
 
   it("renders Noto 700 text and a Material Icon with the bundled fonts, ink within their boxes", async () => {
     const r = await render([
-      { type: "Textbox", ...LT, left: 16, top: 16, width: 240, text: "FLOUR Привет é", fontSize: 40, fontWeight: 700, fontFamily: "Noto Sans Variable" },
+      { type: "Textbox", ...LT, left: 16, top: 16, width: 240, text: "FLOUR\nПривет é", fontSize: 40, fontWeight: 700, fontFamily: "Noto Sans Variable" },
       { type: "Textbox", ...LT, left: 16, top: 160, width: 240, text: "since {dt|YYYY}", fontSize: 24, fontWeight: 500, fontStyle: "italic" },
       { type: "Text", ...LT, left: 280, top: 16, text: String.fromCodePoint(iconCodepoints.lan), fontSize: 64, fontFamily: "Material Icons", lineHeight: 1 },
     ]);
@@ -91,6 +91,7 @@ describe.skipIf(!CHROME && !process.env.CI)("page render (real Chrome)", () => {
       ["QR_MODULE_SMALL", [{ type: "QRCode", left: 40, top: 40, width: 60, text: qrText }]],
       ["QR_QUIET_ZONE", [{ type: "QRCode", left: 40, top: 40, width: 126, text: qrText }, { type: "Rect", left: 172, top: 60, width: 4, height: 40, fill: "black", strokeWidth: 0 }]],
       ["BARCODE_ERR", [{ type: "Barcode", left: 40, top: 40, height: 60, encoding: "EAN13", text: "12345abc" }]],
+      ["TEXT_WRAPPED", [{ type: "Textbox", ...LT, left: 16, top: 16, width: 200, text: "NOT FOR HUMAN CONSUMPTION", fontSize: 17, fontWeight: 500, charSpacing: 20 }]],
       ["BARCODE_QUIET_ZONE", [{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "CODE128B", text: "AB-100" }, { type: "Rect", left: 44, top: 50, width: 4, height: 20, fill: "black", strokeWidth: 0 }]],
     ];
     const results = await Promise.all(cases.map(([, objects]) => render(objects)));
@@ -100,8 +101,18 @@ describe.skipIf(!CHROME && !process.env.CI)("page render (real Chrome)", () => {
     const clean = await Promise.all([
       render([{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "CODE128B", text: "AB-100" }]),
       render([{ type: "Barcode", left: 60, top: 40, height: 60, scaleFactor: 2, encoding: "EAN13", text: "4006381333931" }]),
+      render([{ type: "Textbox", ...LT, left: 16, top: 16, width: 200, text: "NOT FOR HUMAN\nCONSUMPTION", fontSize: 17, fontWeight: 500, charSpacing: 20 }]),
     ]);
     clean.forEach((r) => expect(r.warnings).toEqual([]));
+  });
+
+  it("draws row 1 of variables while the canvas keeps the {key} fields", async () => {
+    const tb = (text: string) => [{ type: "Textbox", ...LT, left: 16, top: 16, width: 352, text, fontSize: 40, fontWeight: 700 }];
+    const [filled, literal, blank] = await Promise.all([render(tb("{a}"), B1, { a: "WWWWWW" }), render(tb("WWWWWW")), render(tb("{a} x"), B1, { a: "" })]);
+    expect(filled.ink).toBe(literal.ink);
+    expect((filled.canvas as any).objects[0].text).toBe("{a}");
+    expect(blank.boxes[0].width).toBeGreaterThan(0);
+    expect(blank.ink).toBeLessThan((await render(tb("{a} x"))).ink); // "" draws nothing; the unfilled field draws "{a}"
   });
 
   it("mirror copy across a horizontal split doubles the ink", async () => {
