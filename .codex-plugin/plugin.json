@@ -1,0 +1,26 @@
+{
+  "name": "niimblue-mcp",
+  "version": "1.0.0",
+  "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, and open them in NiimBlue to print.",
+  "author": { "name": "nightious", "url": "https://github.com/nightious" },
+  "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
+  "repository": "https://github.com/Nightious-Tools/niimblue-mcp",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": ["mcp", "mcp-server", "niimbot", "niimblue", "label", "label-printer", "thermal-printer"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "NiimBlue Labels",
+    "shortDescription": "Design NIIMBOT labels with an exact print preview",
+    "longDescription": "Lays out text, icons, QR codes and barcodes for NIIMBOT label printers (D11, D110, B1, B21 and more), renders the exact 1-bit image the printhead burns with NiimBlue's own code in headless Chrome or Edge, flags anything that will print badly, and returns a link that opens the label in NiimBlue for printing. It never prints or talks to a printer.",
+    "developerName": "nightious",
+    "category": "Design",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/Nightious-Tools/niimblue-mcp",
+    "defaultPrompt": [
+      "Make a pantry jar label for flour on my B1 with 50x30 mm stock.",
+      "Make a cable flag for my NAS power cable on a D11.",
+      "Make an asset tag for LT-0042 with a QR code to https://inv.example.com/a/LT-0042."
+    ]
+  }
+}

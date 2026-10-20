@@ -1,0 +1,16 @@
+{
+  "name": "niimblue-mcp",
+  "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, and open them in NiimBlue to print.",
+  "version": "1.0.0",
+  "author": { "name": "nightious" },
+  "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
+  "repository": "https://github.com/Nightious-Tools/niimblue-mcp",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": ["mcp", "mcp-server", "niimbot", "niimblue", "label", "label-printer", "thermal-printer"],
+  "mcpServers": {
+    "niimblue": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.mjs"]
+    }
+  }
+}

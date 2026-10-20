@@ -1,0 +1,19 @@
+{
+  "name": "niimblue-mcp",
+  "description": "NIIMBOT label design MCP server and skill: exact NiimBlue print previews and open-in-NiimBlue links.",
+  "owner": { "name": "nightious" },
+  "plugins": [
+    {
+      "name": "niimblue-mcp",
+      "source": "./",
+      "description": "MCP server with one read-only tool, render_label, that renders NiimBlue's own 1-bit print preview in headless Chrome or Edge and returns a NiimBlue link, plus a skill with sizes, type scale and code rules for crisp NIIMBOT labels.",
+      "version": "1.0.0",
+      "author": { "name": "nightious" },
+      "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
+      "repository": "https://github.com/Nightious-Tools/niimblue-mcp",
+      "license": "SEE LICENSE IN LICENSE",
+      "keywords": ["mcp", "mcp-server", "niimbot", "niimblue", "label", "label-printer", "thermal-printer"],
+      "category": "design"
+    }
+  ]
+}

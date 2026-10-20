@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    # ubuntu-latest ships Google Chrome, which the render tests need
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # vitest 5 needs node >=22.12; the shipped bundle still targets node 20
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      # build before test so test/dist.test.ts runs the fresh bundle
+      - run: npm run build
+      # Actions sets CI=true, so Chrome-gated tests fail instead of skipping when Chrome is missing
+      - run: npm test
+
+      # dist/index.mjs is committed and is what every install channel executes.
+      # A rebuild must produce no diff, or the shipped bundle is stale.
+      - name: dist/ is in sync with src/
+        run: |
+          if ! git diff --exit-code -- dist/; then
+            echo "::error file=dist/index.mjs::dist/ is stale. Run 'npm run build' and commit dist/"
+            exit 1
+          fi
+
+      # Read, never regex-bump: manifest.json also carries manifest_version.
+      - name: versions agree
+        run: |
+          node -p 'const v = { "package.json": require("./package.json").version, "src/server.ts": require("fs").readFileSync("src/server.ts", "utf8").match(/SERVER_VERSION = "(.+?)"/)?.[1], ".claude-plugin/plugin.json": require("./.claude-plugin/plugin.json").version, ".claude-plugin/marketplace.json": require("./.claude-plugin/marketplace.json").plugins[0].version, ".codex-plugin/plugin.json": require("./.codex-plugin/plugin.json").version, "manifest.json": require("./manifest.json").version }; if (new Set(Object.values(v)).size > 1) { console.error("::error::versions disagree"); process.exitCode = 1; } JSON.stringify(v, null, 1)'

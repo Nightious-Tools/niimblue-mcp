@@ -1,0 +1,44 @@
+{
+  "manifest_version": "0.3",
+  "name": "niimblue-mcp",
+  "display_name": "NiimBlue Labels",
+  "version": "1.0.0",
+  "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, and open them in NiimBlue to print.",
+  "author": { "name": "nightious", "url": "https://github.com/nightious" },
+  "repository": { "type": "git", "url": "https://github.com/Nightious-Tools/niimblue-mcp.git" },
+  "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": ["mcp", "mcp-server", "niimbot", "niimblue", "label", "label-printer", "thermal-printer"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.mjs"],
+      "env": {
+        "NIIMBLUE_CHROME": "${user_config.chrome_path}",
+        "NIIMBLUE_APP_URL": "${user_config.app_url}"
+      }
+    }
+  },
+  "user_config": {
+    "chrome_path": {
+      "type": "file",
+      "title": "Chrome or Edge executable",
+      "description": "Leave empty to find Google Chrome, Chromium or Microsoft Edge in the usual install folders. The preview renders in it headlessly.",
+      "required": false,
+      "default": ""
+    },
+    "app_url": {
+      "type": "string",
+      "title": "NiimBlue URL",
+      "description": "The NiimBlue web app the label link opens (http or https).",
+      "required": false,
+      "default": "https://niim.blue/"
+    }
+  },
+  "compatibility": {
+    "platforms": ["win32", "darwin", "linux"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}

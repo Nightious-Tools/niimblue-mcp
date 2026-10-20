@@ -1,0 +1,31 @@
+# The .mcpb ships only the bundled, dependency-free server (dist/index.mjs) and user-facing docs
+# (README.md, LICENSE, THIRD_PARTY_NOTICES.md). Everything else is build-time, contributor-only, or plugin-channel only.
+node_modules/
+src/
+test/
+evals/
+skills/
+.claude-plugin/
+.claude/
+.codex-plugin/
+.agents/
+.mcp.json
+opencode.json
+.git/
+.github/
+CLAUDE.md
+AGENTS.md
+package.json
+package-lock.json
+tsconfig*.json
+vitest.config.ts
+build.mjs
+.env.example
+.gitignore
+.mcpbignore
+*.mcpb
+.work/
+.review/
+.prose/
+.repowise/
+.tmp/

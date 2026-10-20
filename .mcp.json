@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "niimblue": {
+      "command": "node",
+      "args": ["dist/index.mjs"],
+      "cwd": "."
+    }
+  }
+}
