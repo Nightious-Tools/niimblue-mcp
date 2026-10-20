@@ -1,0 +1,15 @@
+node_modules/
+*.log
+.env
+.env.*
+!.env.example
+# release artifact: attach it to GitHub Releases, do not commit it (dist/ is committed)
+*.mcpb
+# claude plugin eval run output
+evals/results/
+
+# agent tooling
+.work/
+.tmp/
+.repowise/
+AGENTS.md
