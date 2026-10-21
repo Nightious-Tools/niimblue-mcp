@@ -1,4 +1,4 @@
-# Review round 2: templates (niimblue-mcp 1.1.0), base 0531b53
+# Review round 2: templates (niimblue-mcp 1.1.0), base c6dd456
 
 What this change does: `render_label` gains `rows` (values for `{key}` fields), `template`, `save_as` and `overwrite`. `save_as` writes `<slug>.args.json` and `<slug>.niimblue.json` to `NIIMBLUE_TEMPLATES_DIR`. Two new read-only tools, `list_templates` and `get_template`, read saved args or convert a NiimBlue `.json` export. The page gains `TEXT_WRAPPED` and a quiet-zone check per side. Docs, ADR 0002, version 1.1.0 and tests are now in.
 

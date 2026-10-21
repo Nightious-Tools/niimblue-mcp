@@ -1,4 +1,4 @@
-# Review: fonts (v1.2.0), working tree against 51e2faa
+# Review: fonts (v1.2.0), working tree against d4b95a4
 
 What this change does: `render_label` gets an optional `fontFamily` on Textbox and Barcode. The page can now draw five bundled fonts and fonts from a user folder (`NIIMBLUE_FONTS_DIR`). A new read-only `list_fonts` tool shows them. Because the `#load=` link carries only the font's name, a new warning, FONT_NOT_IN_LINK, tells the user which file to add in NiimBlue's Fonts menu.
 

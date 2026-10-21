@@ -22,8 +22,8 @@ decisions:
   accepted_by: nightious
   accepted_artifact: .repowise/decisions.yaml
   evidence:
-  - 0b6d30e
-  - 8891b54
+  - 2cc863b
+  - 58d1fd0
 - id: d1988913334401191d5bb4765ea44cb6
   title: Store fill-in label templates on disk
   decision: 'render_label gains rows: values for {key} fields. With 1 row the server fills the text before
@@ -54,7 +54,7 @@ decisions:
   accepted_by: nightious
   accepted_artifact: .repowise/decisions.yaml
   evidence:
-  - 1b3bc49
+  - 66efc12
 - id: fa6f2f2cafe916dfff57490c7ae331e3
   title: Load bundled and user font files into the unsandboxed preview
   decision: 'The page loads five OFL fonts from fonts/ (JetBrains Mono Bold, Barlow Condensed Bold, Archivo
@@ -93,4 +93,4 @@ decisions:
   accepted_by: nightious
   accepted_artifact: .repowise/decisions.yaml
   evidence:
-  - 21e4b8b
+  - a4848b7
