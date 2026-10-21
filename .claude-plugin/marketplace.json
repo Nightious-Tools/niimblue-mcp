@@ -7,7 +7,7 @@
       "name": "niimblue-mcp",
       "source": "./",
       "description": "MCP server whose render_label tool renders NiimBlue's own 1-bit print preview in headless Chrome or Edge and returns a NiimBlue link, with fill-in templates saved to disk, plus a skill with sizes, type scale and code rules for crisp NIIMBOT labels.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": { "name": "nightious" },
       "homepage": "https://github.com/Nightious-Tools/niimblue-mcp",
       "repository": "https://github.com/Nightious-Tools/niimblue-mcp",

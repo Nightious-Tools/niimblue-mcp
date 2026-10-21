@@ -4,6 +4,7 @@ import { z } from "zod";
 import { modelsLibrary, getPrinterMetaByModel, type PrinterModel } from "@mmote/niimbluelib"; // root import: the deep dist/cjs/printer_models.js import is circular (F3)
 import { iconCodepoints } from "$/styles/mdi_icons";
 import { NbError } from "./util/errors.js";
+import { BUILTIN, FAMILY_RX, NOTO, codepoints } from "./fonts.js";
 
 /** niimbluelib's printer model names, for the `printer` z.enum. */
 export const MODELS = modelsLibrary.map((m) => m.model) as [string, ...string[]];
@@ -19,6 +20,8 @@ const COMMON = {
   angle: z.number().min(-360).max(360).optional().describe("Rotation in degrees around the origin"),
 };
 const STROKE_WIDTH = z.number().min(0).max(50).optional().describe("Stroke width in dots (default 3); ≥2 at 203 dpi");
+const FAMILY = z.string().min(1).max(60).regex(FAMILY_RX).optional()
+  .describe("Font family (default Noto Sans Variable): a list_fonts family. Any other font travels by name only, so the user adds its file in NiimBlue (FONT_NOT_IN_LINK)");
 
 /** One label object; server-side `templates.ts` reads each type's keys from `OBJECT.options` to convert NiimBlue exports. */
 export const OBJECT = z.discriminatedUnion("type", [
@@ -27,7 +30,8 @@ export const OBJECT = z.discriminatedUnion("type", [
     text: z.string().min(1).max(2000).describe("Text; \\n breaks lines. {dt}, {dt|DD.MM.YYYY} or {dt+7d|DD.MM} print the date at print time; {key} fills from rows"),
     width: z.number().min(1).max(5000).describe("Wrap width in dots (long words widen the box)"),
     fontSize: z.number().min(6).max(999).describe("Font size in dots; ≥16 at 203 dpi"),
-    fontWeight: z.number().int().min(100).max(900).optional().describe("Noto Sans Variable weight (default 600); ≥500 under 24 dots"),
+    fontFamily: FAMILY,
+    fontWeight: z.number().int().min(100).max(900).optional().describe("Noto Sans Variable weight (default 600); ≥500 under 24 dots. Other fonts are one weight each: leave it unset (400), as ≥600 fakes bold on a regular file"),
     fontStyle: z.enum(["normal", "italic"]).optional().describe("italic is a synthetic oblique"),
     textAlign: z.enum(["left", "center", "right", "justify"]).optional().describe("Default center, as in the app"),
     lineHeight: z.number().min(0.7).max(3).optional().describe("Line height in font sizes (default 1)"),
@@ -84,6 +88,7 @@ export const OBJECT = z.discriminatedUnion("type", [
     scaleFactor: z.number().int().min(1).max(10).optional().describe("Dots per module (default 2); width follows from it"),
     printText: z.boolean().optional().describe("Print the text under the bars (default true)"),
     fontSize: z.number().min(6).max(60).optional().describe("Size of the printed text (default 12)"),
+    fontFamily: FAMILY,
   }).strict(),
 ]);
 
@@ -163,17 +168,23 @@ export function prepare(args: LabelArgs): { label: LabelInfo; input: PageInput; 
       message: `${src} prints literally (${keys.size ? `rows has only ${[...keys].join(", ")}` : "no rows given"}); add a "${key}" value to rows or replace it with the real text.` });
   };
   const filled = (text: string) => rows ? rows.map((r) => fill(text, r)).join("\n") : text; // every row's text, for the glyph and Code 128 checks
-  const small = (i: number, size: number) => { if (size < 16 * k) warnings.push({ code: "TEXT_SMALL", object: i, message: `fontSize ${size} is under ${+(16 * k).toFixed(1)} px and prints illegibly; use fontSize ${Math.ceil(16 * k)} or more.` }); };
+  const small = (i: number, size: number, family?: string) => {
+    const b = BUILTIN.find((x) => x.family.toLowerCase() === family?.toLowerCase()), min = b?.min_px ?? 16; // a folder font named like a built-in gets the built-in's floor
+    if (size < min * k) warnings.push({ code: "TEXT_SMALL", object: i, message: `fontSize ${size} is under ${+(min * k).toFixed(1)} px${min === 16 ? "" : ` for ${b!.family}`} and prints illegibly; use fontSize ${Math.ceil(min * k)} or more.` });
+  };
+  const glyphs: Record<number, string> = {}; // other fonts' characters, every row: the page checks them against the loaded file
   const objects = args.objects.map((o, i): object => {
     const base = { originX: "left", originY: "top" }; // fabric 7 and OBJECT_DEFAULTS_TEXT default to center
+    if ("fontFamily" in o && o.fontFamily?.toLowerCase() === "material icons") throw new NbError("BAD_INPUT", `objects[${i}]: Material Icons draws icons, not text; use an Icon object with the icon's name.`);
     if (o.type === "Textbox") {
-      const weight = o.fontWeight ?? 600;
-      small(i, o.fontSize);
-      if (weight < 500 && o.fontSize < 24 * k) warnings.push({ code: "TEXT_THIN", object: i, message: `fontWeight ${weight} at fontSize ${o.fontSize} prints broken strokes; use fontWeight 600 or fontSize ${Math.ceil(24 * k)} or more.` });
-      const bad = [...new Set(filled(o.text).match(NOT_IN_FONT))];
-      if (bad.length) warnings.push({ code: "GLYPH_FALLBACK", object: i, message: `${bad.slice(0, 5).map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")} '${c}'`).join(", ")} not in Noto Sans Variable (Latin and Cyrillic only), so each machine substitutes its own font; replace them or use an Icon.` });
+      const noto = (o.fontFamily ?? NOTO).toLowerCase() === NOTO.toLowerCase(), weight = o.fontWeight ?? (noto ? 600 : 400); // one-file fonts: 400 draws the file as is
+      small(i, o.fontSize, o.fontFamily);
+      if (noto && weight < 500 && o.fontSize < 24 * k) warnings.push({ code: "TEXT_THIN", object: i, message: `fontWeight ${weight} at fontSize ${o.fontSize} prints broken strokes; use fontWeight 600 or fontSize ${Math.ceil(24 * k)} or more.` });
+      const text = filled(o.text), bad = [...new Set(text.match(NOT_IN_FONT))];
+      if (!noto) glyphs[i] = [...new Set(text.replace(/\s/gu, ""))].join("");
+      else if (bad.length) warnings.push({ code: "GLYPH_FALLBACK", object: i, message: `${codepoints(bad)} not in Noto Sans Variable (Latin and Cyrillic only), so each machine substitutes its own font; replace them or use an Icon.` });
       fields(i, o.text);
-      return { ...base, fontWeight: 600, ...o };
+      return { ...base, fontWeight: noto ? 600 : 400, ...o };
     }
     if (o.type === "Icon") {
       const cp = ICONS[o.name];
@@ -202,7 +213,7 @@ export function prepare(args: LabelArgs): { label: LabelInfo; input: PageInput; 
   // variables: row 1 as csvFormat writes it for NiimBlue, so a key row 1 lacks is "" in the preview too
   return {
     label: { printer: args.printer, dpi, dpmm, print_direction: printDirection, printhead_px: head, width_px: width, height_px: height },
-    input: { label, objects, dpmm, ...(rows ? { variables: Object.fromEntries([...keys].map((k) => [k, rows[0][k] ?? ""])) } : {}) },
+    input: { label, objects, dpmm, ...(rows ? { variables: Object.fromEntries([...keys].map((k) => [k, rows[0][k] ?? ""])) } : {}), ...(Object.keys(glyphs).length ? { glyphs } : {}) },
     warnings,
   };
 }

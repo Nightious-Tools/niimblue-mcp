@@ -8,6 +8,7 @@ import { getPrinterMetaByModel, type PrinterModel } from "@mmote/niimbluelib";
 import { iconCodepoints } from "$/styles/mdi_icons";
 import { InputSchema, OBJECT, fieldKeys, printerDpmm, type LabelArgs } from "./label.js";
 import { NbError } from "./util/errors.js";
+import { NOTO } from "./fonts.js";
 
 /** File-name-safe name: lowercase Unicode letters, marks, digits and dashes (no / \\ or .), so a name can't leave the folder; may be "". */
 export const slug = (t?: string) => [...(t ?? "").normalize("NFC").toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")].slice(0, 60).join("").replace(/^-|-$/g, "");
@@ -66,11 +67,11 @@ const COMMON_D = { originX: "left", originY: "top", angle: 0 };
 const VECTOR_D = { ...COMMON_D, fill: "transparent", stroke: "black", strokeWidth: 3 };
 /** What label.ts or the page fills in when a key is omitted: such values are left out of the args. */
 const OURS: Record<string, Record<string, unknown>> = {
-  Textbox: { ...COMMON_D, fontWeight: 600, fontStyle: "normal", textAlign: "center", lineHeight: 1, charSpacing: 0, scaleX: 1, fontAutoSize: false, fill: "black", backgroundColor: "transparent" },
+  Textbox: { ...COMMON_D, fontFamily: NOTO, fontWeight: 600, fontStyle: "normal", textAlign: "center", lineHeight: 1, charSpacing: 0, scaleX: 1, fontAutoSize: false, fill: "black", backgroundColor: "transparent" },
   Icon: { ...COMMON_D, fill: "black" },
   Rect: { ...VECTOR_D, rx: 0, ry: 0 }, Circle: VECTOR_D, Polyline: VECTOR_D,
   QRCode: { ...COMMON_D, ecl: "M" },
-  Barcode: { ...COMMON_D, scaleFactor: 2, printText: true, fontSize: 12 },
+  Barcode: { ...COMMON_D, scaleFactor: 2, printText: true, fontSize: 12, fontFamily: NOTO },
 };
 /** fabric 7 / NiimBlue defaults for keys render_label has no param for: a different value is reported in notes. */
 const FABRIC: Record<string, unknown> = {
@@ -78,7 +79,7 @@ const FABRIC: Record<string, unknown> = {
   direction: "ltr", textDecorationThickness: 66.667, minWidth: 20, splitByGrapheme: false, stroke: null, strokeWidth: 1, strokeDashArray: null,
   strokeLineCap: "butt", strokeDashOffset: 0, strokeLineJoin: "miter", strokeMiterLimit: 4, scaleX: 1, scaleY: 1, flipX: false, flipY: false,
   opacity: 1, shadow: null, visible: true, backgroundColor: "", fillRule: "nonzero", paintFirst: "fill", globalCompositeOperation: "source-over",
-  skewX: 0, skewY: 0, startAngle: 0, endAngle: 360, counterClockwise: false, mode: "Byte", qrVersion: 0, fontFamily: "Noto Sans Variable",
+  skewX: 0, skewY: 0, startAngle: 0, endAngle: 360, counterClockwise: false, mode: "Byte", qrVersion: 0,
 };
 const SKIP = new Set(["version", "strokeUniform", "snapAngle", "width", "height"]); // derived from other keys, or not drawn
 const SKIP_BY_TYPE: Record<string, string[]> = { // keys the object's own _render ignores or that the Icon conversion fixes
@@ -107,7 +108,9 @@ export function fromExport(t: any, printer: string): { args: LabelArgs; notes: s
   if (bad.length) throw new NbError("BAD_INPUT", `objects ${bad.join(", ")} can't be converted: render_label takes Textbox, Material Icons, Rect, Circle, Polyline, QRCode and Barcode only (no images, ArUco markers, paths or groups); delete them in NiimBlue and export again.`);
 
   const objects = t.canvas.objects.map((src: any, i: number) => {
-    const type = kind(src)!, shape = SHAPES.get(type)!, ours = OURS[type], skip = new Set([...SKIP, ...(SKIP_BY_TYPE[type] ?? [])]);
+    const type = kind(src)!, shape = SHAPES.get(type)!, skip = new Set([...SKIP, ...(SKIP_BY_TYPE[type] ?? [])]);
+    const other = type === "Textbox" && typeof src.fontFamily === "string" && src.fontFamily.toLowerCase() !== NOTO.toLowerCase();
+    const ours = other ? { ...OURS.Textbox, fontWeight: 400 } : OURS[type]; // label.ts defaults a non-Noto family to 400, not 600
     const o: Record<string, unknown> = { type };
     for (const [k, raw] of Object.entries(src)) {
       const v = norm(k, raw), dflt = k in ours && same(v, ours[k]);

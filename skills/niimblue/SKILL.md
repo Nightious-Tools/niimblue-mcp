@@ -17,7 +17,8 @@ description: 'Design NIIMBOT labels with the niimblue MCP and hand them to NiimB
 
 - Pick the stock by aspect ratio: 4:1 is D101 100×24; a B-series 48×12, or rotate the design onto B-series stock. Say what you picked.
 - Scale the photo's coordinates to dots (`width_mm` × dpmm across), then fix the result against the PNG and `boxes`.
-- Coloured or tinted panels become inverse black with white text. A monospace face becomes Noto caps with `charSpacing` 20–50.
+- Coloured or tinted panels become inverse black with white text.
+- Match the face with a built-in `fontFamily` and leave `fontWeight` unset: mono → JetBrains Mono Bold, condensed → Barlow Condensed Bold, heavy or display → Archivo Black or Archivo ExtraBold, slab or serif → Bitter Bold. Any other face stays Noto.
 - Chevrons, arrows and logo marks: a `Polyline` with `fill: "black"` and `stroke: "transparent"`, its points tracing the outline (closed implicitly). Or an Icon (`chevron_right`, `arrow_forward_ios`).
 - `TEXT_WRAPPED` means a line broke where the photo has none: widen the box as the warning says.
 
@@ -54,6 +55,7 @@ Wider stock prints only its central part: design 14–15 mm D-series tape as 12 
 | floor, short strings only | 16–18 | 700 |
 
 - At most 3 sizes per label, Icon `fontSize` included, about 1.5–2× apart. On 12 mm tape (96 px) a label is one hero word at 56–64 plus an optional icon or inverse block beside it, never a second line: two lines can't fit a 56 px hero; a longer word gets scaleX 0.8, then drops to 44 (on a split face, keep its box inside the face). Weight 400 only at 24 px or more; never below 400.
+- Floor by font (`list_fonts` `min_px`): JetBrains Mono Bold and Barlow Condensed Bold 18, Archivo Black 20, every other font 16. JetBrains Mono's dotted 0 fills in at 16 and below.
 - Caps at 16–24 px: `charSpacing` 50–100. No negative tracking under 32 px.
 - `lineHeight` 1–1.1 for caps, 1.15 for mixed case. `scaleX` 0.8–0.9 fits a long name on narrow tape.
 - `Textbox.width` is the wrap width: make it the column width and set `textAlign`. A word wider than `width` widens the box, so check `boxes`.
@@ -87,7 +89,7 @@ Wider stock prints only its central part: design 14–15 mm D-series tape as 12 
 
 ## Recipes
 
-Each one renders with zero warnings. Change the words, keep the geometry, then render to check.
+Each one renders with zero warnings, except the font recipe's FONT_NOT_IN_LINK, which is for the user. Change the words, keep the geometry, then render to check.
 
 **Jar, B1 on 50×30 stock:** inverse header band, one rule, opened date filled at print time.
 ```json
@@ -185,9 +187,18 @@ Each one renders with zero warnings. Change the words, keep the geometry, then r
 {"type":"Textbox","text":"USB-C","left":72,"top":16,"width":184,"fontSize":56,"fontWeight":800,"scaleX":0.85,"textAlign":"left"}]}
 ```
 
+**Drawer, D110 40×12, a built-in font:** condensed caps in Barlow Condensed Bold, weight left unset. Its one warning, FONT_NOT_IN_LINK, goes to the user.
+```json
+{"printer":"D110","width_mm":40,"height_mm":12,"title":"M3 screws","objects":[
+{"type":"Icon","name":"hardware","left":12,"top":21,"fontSize":48},
+{"type":"Textbox","text":"M3 × 12 MM","left":72,"top":16,"width":236,"fontSize":56,"fontFamily":"Barlow Condensed Bold","textAlign":"left"}]}
+```
+
 ## Pitfalls
 
-- Only Noto Sans Variable (Latin and Cyrillic) and Material Icons travel in the link. Latin Extended (ł ř ő ş), arrows such as →, and emoji fall back to another font on the user's machine: write `-` or use an `Icon` (`arrow_forward`).
+- Only Noto Sans Variable (Latin and Cyrillic) and Material Icons are in every NiimBlue. Any other `fontFamily` travels by name only: pass FONT_NOT_IN_LINK on to the user, who adds that file in NiimBlue → Fonts once. FONT_MISSING means the font isn't built in or in the font folder: pick one from `list_fonts`. Never download or write font files into the font folder yourself: the user adds them.
+- niim.blue currently drops an uploaded font whose name has a space, all five built-ins included, so the label prints in the fallback font. A fix has been submitted to NiimBlue; until it is live, the user sets `NIIMBLUE_APP_URL` to a NiimBlue build that has it. FONT_NOT_IN_LINK says so.
+- Characters a font lacks fall back to another font on the user's machine (`GLYPH_FALLBACK`). Noto lacks Latin Extended (ł ř ő ş), the built-ins have Latin only, and none has arrows such as → or emoji: write `-` or use an `Icon` (`arrow_forward`).
 - The link replaces the label open in NiimBlue after a confirm: tell the user to save first.
 - `{dt}`, `{dt|DD.MM.YYYY}` and `{dt+7d|DD.MM}` resolve when the label prints, not when you design it. Any other `{key}` fills from `rows`; without a value it prints literally (`UNFILLED_FIELD`).
 - Only `black`, `white` and `transparent` exist; anything grey or anti-aliased thresholds to black or white at 140.

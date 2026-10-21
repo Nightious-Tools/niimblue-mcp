@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "niimblue-mcp",
   "display_name": "NiimBlue Labels",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Design NIIMBOT labels, see NiimBlue's exact 1-bit print preview, save fill-in templates, and open them in NiimBlue to print.",
   "author": { "name": "nightious", "url": "https://github.com/nightious" },
   "repository": { "type": "git", "url": "https://github.com/Nightious-Tools/niimblue-mcp.git" },
@@ -18,7 +18,8 @@
       "env": {
         "NIIMBLUE_CHROME": "${user_config.chrome_path}",
         "NIIMBLUE_APP_URL": "${user_config.app_url}",
-        "NIIMBLUE_TEMPLATES_DIR": "${user_config.templates_dir}"
+        "NIIMBLUE_TEMPLATES_DIR": "${user_config.templates_dir}",
+        "NIIMBLUE_FONTS_DIR": "${user_config.fonts_dir}"
       }
     }
   },
@@ -41,6 +42,13 @@
       "type": "directory",
       "title": "Templates folder",
       "description": "Where render_label save_as writes label templates. Leave empty for Documents/NiimBlue Templates in your home folder.",
+      "required": false,
+      "default": ""
+    },
+    "fonts_dir": {
+      "type": "directory",
+      "title": "Font folder",
+      "description": "Extra label fonts (.woff2, .ttf or .otf; the family is the file name up to the first dot). Read only. Leave empty for Documents/NiimBlue Fonts in your home folder.",
       "required": false,
       "default": ""
     }

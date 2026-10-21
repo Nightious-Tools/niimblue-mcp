@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { gunzipSync } from "node:zlib";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createServer, INSTRUCTIONS, type Deps } from "../src/server.js";
 import { NbError } from "../src/util/errors.js";
+import { BUILTIN } from "../src/fonts.js";
 import { fakeRender, testConfig } from "./helpers.js";
 
 const LABEL = { printer: "D110", width_mm: 40, height_mm: 12, objects: [{ type: "Textbox", text: "LAN", left: 8, top: 8, width: 300, fontSize: 48 }] };
@@ -29,12 +31,12 @@ const propNames = (s: unknown): string[] => !s || typeof s !== "object" ? [] :
   Object.entries(s).flatMap(([k, v]) => k === "properties" && v && typeof v === "object" ? [...Object.keys(v), ...Object.values(v).flatMap(propNames)] : propNames(v));
 
 describe("MCP server", () => {
-  it("exposes render_label (writes only for save_as) and two read-only template tools, with portable schemas", async () => {
+  it("exposes render_label (writes only for save_as) and three read-only tools, with portable schemas", async () => {
     const c = await connect();
     const tools = (await c.client.listTools()).tools;
-    expect(tools.map((t) => t.name)).toEqual(["render_label", "list_templates", "get_template"]);
+    expect(tools.map((t) => t.name)).toEqual(["render_label", "list_templates", "list_fonts", "get_template"]);
     expect(tools[0].annotations).toEqual({ title: "Render NiimBlue label", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    expect(tools.slice(1).map((t) => t.annotations?.readOnlyHint)).toEqual([true, true]);
+    expect(tools.slice(1).map((t) => t.annotations?.readOnlyHint)).toEqual([true, true, true]);
     for (const t of tools) {
       const s = t.inputSchema as any;
       expect(s.type).toBe("object");
@@ -186,6 +188,80 @@ describe("templates", () => {
     expect(r.json.error).toMatchObject({ code: "BAD_INPUT", message: expect.stringContaining("objects 1 (Image)") });
     expect((await c.tool("get_template", { path: img })).json.error.message).toMatch(/path needs printer/);
     expect(existsSync(join(c.dir, "img.args.json"))).toBe(false);
+    await c.close();
+  });
+});
+
+describe("fonts", () => {
+  const FONTS = new URL("../fonts/", import.meta.url), font = (f: string) => fileURLToPath(new URL(`${f}.woff2`, FONTS));
+  const tb = (fontFamily: string, top = 8) => ({ type: "Textbox", text: "LAN", left: 8, top, width: 300, fontSize: 32, fontFamily });
+  const setup = async (files: Record<string, string | number> = {}, render = fakeRender()) => {
+    const dir = mkdtempSync(join(tmpdir(), "niimblue-fonts-"));
+    for (const [name, src] of Object.entries(files)) typeof src === "number" ? (writeFileSync(join(dir, name), ""), truncateSync(join(dir, name), src)) : copyFileSync(src, join(dir, name));
+    return { dir, render, ...(await connect({ render, cfg: testConfig({ fontsDir: dir, templatesDir: dir }) })) };
+  };
+
+  it("fonts/ holds exactly the BUILTIN files", () => {
+    expect(readdirSync(FONTS).sort()).toEqual(BUILTIN.map((b) => `${b.family}.woff2`).sort());
+  });
+
+  it("list_fonts: built-ins with paths, folder files (a shadowing one, an .otf), skips with reasons", async () => {
+    const c = await setup({ "Bitter Bold.woff2": font("JetBrains Mono Bold"), "Barlow Otf.otf": "test/fixtures/BarlowCondensed-Bold.otf", "Barlow Otf.ttf": font("Barlow Condensed Bold"),
+      "readme.txt": font("Bitter Bold"), "1bad.woff2": font("Bitter Bold"), "Material Icons.ttf": font("Bitter Bold"), "Huge.ttf": 3 * 2 ** 20 });
+    symlinkSync(font("Archivo Black"), join(c.dir, "Linked.woff2")); mkdirSync(join(c.dir, "Sub.ttf"));
+    const { json } = await c.tool("list_fonts", {});
+    expect(json).toMatchObject({ ok: true, tool: "list_fonts", default: "Noto Sans Variable" });
+    expect(json.builtin).toEqual(BUILTIN.map((b) => ({ family: b.family, notes: b.notes, min_px: b.min_px, path: font(b.family) })));
+    expect(json.folder.dir).toBe(c.dir);
+    expect(json.folder.fonts).toEqual(expect.arrayContaining([
+      { family: "Bitter Bold", path: join(c.dir, "Bitter Bold.woff2"), bytes: 21908, shadows_builtin: true },
+      { family: "Barlow Otf", path: join(c.dir, "Barlow Otf.ttf"), bytes: 22444 }, // .ttf beats .otf
+    ]));
+    expect(json.folder.fonts).toHaveLength(2);
+    expect(json.folder.skipped.map((s: any) => s.file).sort()).toEqual(["1bad.woff2", "Barlow Otf.otf", "Huge.ttf", "Linked.woff2", "Material Icons.ttf", "Sub.ttf", "readme.txt"]);
+    expect(json.folder.skipped.find((s: any) => s.file === "Linked.woff2").reason).toMatch(/^a link or folder/);
+    await c.close();
+  });
+
+  it("render_label: folder bytes to the page, FONT_NOT_IN_LINK once per family, FONT_MISSING with near names, Noto silent", async () => {
+    const c = await setup({ "Fixture Face.otf": "test/fixtures/BarlowCondensed-Bold.otf" });
+    const { json } = await c.call({ ...LABEL, objects: [tb("Noto Sans Variable"), tb("fixture face", 40), tb("Fixture Face", 60), tb("Bitter Bold", 70), tb("Bitter Bold"), tb("Bitter Slab")] });
+    expect(json.warnings.map((w: any) => [w.code, w.object])).toEqual([["FONT_NOT_IN_LINK", 1], ["FONT_NOT_IN_LINK", 3], ["FONT_MISSING", 5]]);
+    expect(json.warnings[0].message).toContain(`add ${join(c.dir, "Fixture Face.otf")} in NiimBlue → Fonts`);
+    expect(json.warnings[0].message).toContain("renamed to .ttf first");
+    expect(json.warnings[1].message).toContain(`add ${font("Bitter Bold")} in NiimBlue`);
+    expect(json.warnings[1].message).toMatch(/name has a space.*NIIMBLUE_APP_URL/);
+    expect(json.warnings[2].message).toMatch(new RegExp(`'Bitter Slab' is neither .* ${c.dir}.*use Bitter Bold,`));
+    expect(c.render.calls[0].fonts).toEqual([{ family: "Fixture Face", b64: readFileSync("test/fixtures/BarlowCondensed-Bold.otf").toString("base64") }]);
+    expect((await c.call(LABEL)).json.warnings).toEqual([]);
+    expect(c.render.calls[1].fonts).toEqual([]);
+    await c.close();
+  });
+
+  it("a family the page couldn't load gets only the page's FONT_MISSING, not FONT_NOT_IN_LINK", async () => {
+    const c = await setup({ "Junk.ttf": font("Bitter Bold") }, fakeRender({ warnings: [{ code: "FONT_MISSING", object: 0, message: "not a valid font file" }] }));
+    expect((await c.call({ ...LABEL, objects: [tb("Junk"), tb("Bitter Bold", 40)] })).json.warnings.map((w: any) => [w.code, w.object])).toEqual([["FONT_NOT_IN_LINK", 1], ["FONT_MISSING", 0]]);
+    await c.close();
+  });
+
+  it("a folder font over 2 MB is BAD_INPUT before rendering", async () => {
+    const c = await setup({ "Huge.ttf": 3 * 2 ** 20 });
+    const { json } = await c.call({ ...LABEL, objects: [tb("Huge")] });
+    expect(json.error).toMatchObject({ code: "BAD_INPUT", message: expect.stringContaining("over the 2 MB") });
+    expect(c.render.calls).toHaveLength(0);
+    await c.close();
+  });
+
+  it("get_template: a Bitter Bold export round-trips with no notes, its 400 default left out", async () => {
+    const c = await setup();
+    const args = { ...LABEL, objects: [tb("Bitter Bold"), { type: "Barcode", text: "A1", encoding: "CODE128B", left: 8, top: 40, height: 40, fontSize: 16, fontFamily: "Bitter Bold" }] };
+    const { json } = await c.call({ ...args, save_as: "bitter" });
+    const back = await c.tool("get_template", { path: json.saved.niimblue_path, printer: "D110" });
+    expect(back.json).toMatchObject({ ok: true, notes: [] });
+    expect(back.json.args).toEqual(args);
+    const noto = join(c.dir, "noto.json"); // NiimBlue writes Noto's family and weight out: no key comes back
+    writeFileSync(noto, JSON.stringify({ label: { size: { width: 320, height: 96 } }, canvas: { objects: [{ ...tb("Noto Sans Variable"), originX: "left", originY: "top", fontWeight: 600 }] } }));
+    expect((await c.tool("get_template", { path: noto, printer: "D110" })).json.args.objects).toEqual([{ type: "Textbox", text: "LAN", left: 8, top: 8, width: 300, fontSize: 32 }]);
     await c.close();
   });
 });

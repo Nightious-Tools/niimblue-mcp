@@ -7,7 +7,7 @@ import { findChrome } from "../src/chrome.js";
 export const CHROME = (() => { try { return findChrome(process.env); } catch { return undefined; } })();
 
 export function testConfig(over: Partial<Config> = {}): Config {
-  return { ...loadConfig({}), logLevel: "silent", templatesDir: join(tmpdir(), "niimblue-test-templates-unused"), ...over }; // never the real ~/Documents
+  return { ...loadConfig({}), logLevel: "silent", templatesDir: join(tmpdir(), "niimblue-test-templates-unused"), fontsDir: join(tmpdir(), "niimblue-test-fonts-unused"), ...over }; // never the real ~/Documents
 }
 
 /** 1×1 black PNG. */

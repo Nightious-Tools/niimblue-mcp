@@ -19,8 +19,11 @@ type LabelProps = {
   mirror?: "none" | "copy" | "flip";
 };
 
-/** What label.ts hands the page: px label props, fabric object JSON in paint order, dots per mm, rows[0] for the {key} fields. */
-type PageInput = { label: LabelProps; objects: object[]; dpmm: number; variables?: Record<string, string> };
+/**
+ * What label.ts hands the page: px label props, fabric object JSON in paint order, dots per mm, rows[0] for the {key} fields;
+ * glyphs: a non-Noto Textbox's distinct characters by object index; fonts: NIIMBLUE_FONTS_DIR files the label uses (fontdir.ts).
+ */
+type PageInput = { label: LabelProps; objects: object[]; dpmm: number; variables?: Record<string, string>; glyphs?: Record<number, string>; fonts?: { family: string; b64: string }[] };
 
 type RenderWarning = { code: string; object?: number; message: string };
 type RenderBox = { i: number; type: string; left: number; top: number; width: number; height: number };

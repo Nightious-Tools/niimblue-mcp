@@ -3,7 +3,14 @@ import { PNG } from "pngjs";
 import jsQR from "jsqr";
 import { iconCodepoints } from "$/styles/mdi_icons";
 import { ExportedLabelTemplateSchema } from "$/types";
+import { copyFileSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderLabel } from "../src/chrome.js";
+import { InputSchema, prepare } from "../src/label.js";
+import { resolveFonts } from "../src/fontdir.js";
+import { BUILTIN } from "../src/fonts.js";
 import { CHROME } from "./helpers.js";
 
 const B1: LabelProps = { printDirection: "top", size: { width: 384, height: 240 } };
@@ -122,5 +129,56 @@ describe.skipIf(!CHROME && !process.env.CI)("page render (real Chrome)", () => {
     expect(two.ink / one.ink).toBeGreaterThan(1.98);
     expect(two.ink / one.ink).toBeLessThan(2.02);
     expect(two.boxes).toHaveLength(1); // boxes are the input objects, not the mirrored clones
+  });
+});
+
+describe.skipIf(!CHROME && !process.env.CI)("fonts (real Chrome)", () => {
+  const font = (f: string) => fileURLToPath(new URL(`../fonts/${f}.woff2`, import.meta.url));
+  const folder = (files: Record<string, string>) => {
+    const dir = mkdtempSync(join(tmpdir(), "niimblue-fonts-"));
+    for (const [name, src] of Object.entries(files)) src.startsWith("/") ? copyFileSync(src, join(dir, name)) : writeFileSync(join(dir, name), src);
+    return dir;
+  };
+  const NONE = join(tmpdir(), "niimblue-test-fonts-unused");
+  /** The server's path: prepare, resolveFonts, render; the PNG and every warning code. */
+  async function label(fontFamily: string | undefined, dir = NONE, text = "Hamburg 123", extra: object = {}) {
+    const a = InputSchema.parse({ printer: "B1", width_mm: 48, height_mm: 30, objects: [{ type: "Textbox", text, left: 16, top: 16, width: 352, fontSize: 40, ...(fontFamily ? { fontFamily } : {}), ...extra }] });
+    const { input, warnings } = prepare(a), f = await resolveFonts(dir, a.objects);
+    const r = await renderLabel({ ...input, fonts: f.fonts });
+    const all = [...warnings, ...f.warnings.filter((w) => !r.warnings.some((p) => p.code === "FONT_MISSING" && p.object === w.object)), ...r.warnings]; // as server.ts
+    return { png: r.png_b64, all, codes: all.map((w) => w.code) };
+  }
+
+  it("each built-in draws differently from Noto, and only asks for its file", async () => {
+    const [noto, ...rest] = await Promise.all([label(undefined), ...BUILTIN.map((b) => label(b.family))]);
+    expect(noto.codes).toEqual([]);
+    rest.forEach((r, i) => { expect(r.codes, BUILTIN[i].family).toEqual(["FONT_NOT_IN_LINK"]); expect(r.png, BUILTIN[i].family).not.toBe(noto.png); });
+    expect(new Set(rest.map((r) => r.png)).size).toBe(BUILTIN.length);
+  });
+
+  it("a folder file loads, and beats the built-in of the same name", async () => {
+    const dir = folder({ "Fixture Face.woff2": font("Bitter Bold"), "Bitter Bold.woff2": font("JetBrains Mono Bold") });
+    const [fixture, bitter, shadowed, mono, w400] = await Promise.all([label("Fixture Face", dir), label("Bitter Bold"), label("Bitter Bold", dir), label("JetBrains Mono Bold"), label("Bitter Bold", NONE, undefined, { fontWeight: 400 })]);
+    expect(fixture.codes).toEqual(["FONT_NOT_IN_LINK"]);
+    expect(fixture.png).toBe(bitter.png);
+    expect(shadowed.png).toBe(mono.png);
+    expect(w400.png).toBe(bitter.png); // the default is 400: the file as drawn
+  });
+
+  it("an .otf loads; an unknown family and a broken file are FONT_MISSING, not a failed render", async () => {
+    const dir = folder({ "Barlow Otf.otf": fileURLToPath(new URL("fixtures/BarlowCondensed-Bold.otf", import.meta.url)), "Junk.ttf": "not a font" });
+    const [otf, unknown, junk, noto] = await Promise.all([label("Barlow Otf", dir), label("No Such Face", dir), label("Junk", dir), label(undefined)]);
+    expect(otf.codes).toEqual(["FONT_NOT_IN_LINK"]);
+    expect(otf.png).not.toBe(noto.png);
+    expect(unknown.codes).toEqual(["FONT_MISSING"]);
+    expect(junk.codes).toEqual(["FONT_MISSING"]);
+    expect(junk.all[0].message).toMatch(/not a valid font file/);
+  });
+
+  it("GLYPH_FALLBACK names what a built-in lacks, nothing for Latin", async () => {
+    const [cyr, latin] = await Promise.all([label("Bitter Bold", NONE, "Hello ж"), label("Bitter Bold", NONE, "Hello, world! 0-9 é")]);
+    expect(cyr.codes).toEqual(["FONT_NOT_IN_LINK", "GLYPH_FALLBACK"]);
+    expect(cyr.all[1]).toMatchObject({ object: 0, message: expect.stringMatching(/^U\+0436 'ж' not in Bitter Bold/) });
+    expect(latin.codes).toEqual(["FONT_NOT_IN_LINK"]);
   });
 });

@@ -1,4 +1,5 @@
-# The .mcpb ships only the bundled, dependency-free server (dist/index.mjs) and user-facing docs
+# The .mcpb ships only the bundled, dependency-free server (dist/index.mjs), the built-in font files
+# (fonts/, which users upload in NiimBlue's Fonts menu and list_fonts points at) and user-facing docs
 # (README.md, LICENSE, THIRD_PARTY_NOTICES.md). Everything else is build-time, contributor-only, or plugin-channel only.
 node_modules/
 src/

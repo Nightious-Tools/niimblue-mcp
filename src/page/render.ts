@@ -11,10 +11,18 @@ import { threshold } from "$/utils/post_process";
 import latin from "@fontsource-variable/noto-sans/files/noto-sans-latin-wght-normal.woff2";
 import cyrillic from "@fontsource-variable/noto-sans/files/noto-sans-cyrillic-wght-normal.woff2";
 import icons from "material-icons/iconfont/material-icons.woff2";
+import { BUILTIN, NOTO, codepoints } from "../fonts";
+import jetbrains from "../../fonts/JetBrains Mono Bold.woff2";
+import barlow from "../../fonts/Barlow Condensed Bold.woff2";
+import archivoBlack from "../../fonts/Archivo Black.woff2";
+import archivoExtra from "../../fonts/Archivo ExtraBold.woff2";
+import bitter from "../../fonts/Bitter Bold.woff2";
 
 configureFabric();
 
-const NOTO = "Noto Sans Variable";
+const BYTES: Record<(typeof BUILTIN)[number]["family"], Uint8Array> = {
+  "JetBrains Mono Bold": jetbrains, "Barlow Condensed Bold": barlow, "Archivo Black": archivoBlack, "Archivo ExtraBold": archivoExtra, "Bitter Bold": bitter,
+};
 // descriptors copied from NiimBlue's styles/font.scss
 const fontsReady = Promise.all([
   new FontFace(NOTO, latin as BufferSource, { style: "normal", weight: "100 900", display: "swap", unicodeRange: "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD" }),
@@ -26,15 +34,40 @@ const TEXT = new Set(["Textbox", "Text"]);
 const VECTOR = new Set(["Rect", "Circle", "Polyline"]);
 const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print settings
 
-(globalThis as any).niimRender = async ({ label, objects, dpmm, variables }: PageInput): Promise<PageResult> => {
+(globalThis as any).niimRender = async ({ label, objects, dpmm, variables, glyphs, fonts }: PageInput): Promise<PageResult> => {
   await fontsReady;
+  const warnings: RenderWarning[] = [];
+  const warn = (code: string, object: number, message: string) => warnings.push({ code, object, message });
+
+  // the families the label uses, loaded as FileUtils.loadFonts does (file_utils.ts:440, no descriptors); a folder file beats a built-in
+  const files = new Map<string, [string, BufferSource]>(BUILTIN.map((b) => [b.family.toLowerCase(), [b.family, BYTES[b.family] as BufferSource]]));
+  for (const f of fonts ?? []) files.set(f.family.toLowerCase(), [f.family, Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0))]);
+  const first = new Map<string, number>(), loaded = new Set<string>();
+  objects.forEach((o: any, i) => { const k = o.fontFamily?.toLowerCase(); if (files.has(k) && !first.has(k)) first.set(k, i); });
+  await Promise.all([...first].map(async ([k, i]) => {
+    const [family, bytes] = files.get(k)!;
+    try { document.fonts.add(await new FontFace(family, bytes).load()); loaded.add(k); }
+    catch { warn("FONT_MISSING", i, `'${family}' is not a valid font file, so it prints in a fallback font; replace the file or use a list_fonts family.`); }
+  }));
+  // a glyph the file lacks draws exactly as in a family nobody has
+  // shortcut: a font whose glyph is pixel-identical to the system fallback's warns falsely; compare a second fallback family if that ever bites
+  const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+  probe.canvas.width = probe.canvas.height = 64;
+  const draw = (font: string, ch: string) => { probe.clearRect(0, 0, 64, 64); probe.font = font; probe.fillText(ch, 4, 52); return probe.getImageData(0, 0, 64, 64).data.join(); };
+  for (const [i, chars] of Object.entries(glyphs ?? {})) {
+    const fam: string = (objects[+i] as any).fontFamily;
+    if (!loaded.has(fam.toLowerCase())) continue;
+    const miss = [...chars].filter((ch) => draw(`48px "${fam}"`, ch) === draw('48px "NoSuchFamily"', ch));
+    if (miss.length) warn("GLYPH_FALLBACK", +i, `${codepoints(miss)} not in ${fam}, so each machine substitutes its own font; replace them or use a list_fonts family that has them.`);
+  }
+
   const merged = objects.map((o: any) => {
     const m: any = { ...(TEXT.has(o.type) ? OBJECT_DEFAULTS_TEXT : VECTOR.has(o.type) ? OBJECT_DEFAULTS_VECTOR : OBJECT_DEFAULTS), ...o };
     if (o.type === "Polyline") for (const k of ["left", "top"]) if (o[k] === undefined) delete m[k]; // fabric places an omitted axis from the points
     return m;
   });
   for (const o of merged) {
-    const font = TEXT.has(o.type) ? `${o.fontStyle ?? "normal"} ${o.fontWeight ?? "normal"} 16px "${o.fontFamily}"` : o.type === "Barcode" ? `bold 16px "${NOTO}"` : "";
+    const font = TEXT.has(o.type) ? `${o.fontStyle ?? "normal"} ${o.fontWeight ?? "normal"} 16px "${o.fontFamily}"` : o.type === "Barcode" ? `bold 16px "${o.fontFamily ?? NOTO}"` : "";
     if (font && !document.fonts.check(font)) throw new Error(`FONT_NOT_LOADED: ${font}`);
   }
   const { width: W, height: H } = label.size;
@@ -67,8 +100,6 @@ const THRESHOLD = 140; // PrintPreview.svelte default; the link carries no print
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (black(x, y)) return true;
     return false;
   };
-  const warnings: RenderWarning[] = [];
-  const warn = (code: string, object: number, message: string) => warnings.push({ code, object, message });
   const boxes = objs.map((o: any, i) => {
     const r = o.getBoundingRect(), type: string = o.constructor.type; // o.type is lowercased in fabric 7
     const box = { i, type, left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };

@@ -10,6 +10,8 @@ const INSTALL = "install Google Chrome or Microsoft Edge (NiimBlue needs one to 
 const LINUX = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "microsoft-edge-stable", "microsoft-edge"];
 const MAC = ["Google Chrome.app/Contents/MacOS/Google Chrome", "Chromium.app/Contents/MacOS/Chromium", "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"];
 // --no-sandbox always: the page is our own bundle with schema-bounded input and no network; avoids root/container/AppArmor failures.
+// Font files it parses come only from the bundle and NIIMBLUE_FONTS_DIR (user-controlled, picked by listing match, never a path from tool input),
+// and Chrome's OTS sanitises them before FreeType/HarfBuzz; font bytes from tool input or the network mean dropping --no-sandbox first.
 // --disable-gpu: identical pixels on Linux and macOS, and no GPU start-up in the render path (a cold Windows run read back blank)
 const ARGS = ["--headless", "--remote-debugging-pipe", "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--disable-extensions",
   "--disable-background-networking", "--disable-sync", "--mute-audio", "--force-device-scale-factor=1", "--force-color-profile=srgb", "--disable-gpu"];

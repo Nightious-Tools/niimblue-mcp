@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { iconCodepoints } from "$/styles/mdi_icons";
 import { InputSchema, prepare } from "../src/label.js";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { renderLabel } from "../src/chrome.js";
+import { resolveFonts } from "../src/fontdir.js";
 import { CHROME } from "./helpers.js";
 
 const md = readFileSync(new URL("../skills/niimblue/SKILL.md", import.meta.url), "utf8");
@@ -15,8 +18,8 @@ describe("SKILL.md", () => {
     expect(fm).toMatch(/^description: '(?:[^']|'')+'$/m); // unquoted ": " silently drops the skill
   });
 
-  it("has 9 recipes the schema accepts", () => {
-    expect(recipes).toHaveLength(9);
+  it("has 10 recipes the schema accepts", () => {
+    expect(recipes).toHaveLength(10);
     for (const r of recipes) expect(InputSchema.safeParse(r).error).toBeUndefined();
   });
 
@@ -26,8 +29,9 @@ describe("SKILL.md", () => {
     expect(names.filter((n) => !(n in iconCodepoints))).toEqual([]);
   });
 
-  it.skipIf(!CHROME && !process.env.CI).each(recipes.map((r, i) => [i + 1, r] as const))("recipe %i renders with zero warnings", async (_, r) => {
-    const { input, warnings } = prepare(InputSchema.parse(r));
-    expect([...warnings, ...(await renderLabel(input)).warnings]).toEqual([]);
+  it.skipIf(!CHROME && !process.env.CI).each(recipes.map((r, i) => [i + 1, r] as const))("recipe %i renders with zero warnings (the font recipe: FONT_NOT_IN_LINK only)", async (n, r) => {
+    const a = InputSchema.parse(r), { input, warnings } = prepare(a), f = await resolveFonts(join(tmpdir(), "niimblue-test-fonts-unused"), a.objects);
+    const codes = [...warnings, ...f.warnings, ...(await renderLabel({ ...input, fonts: f.fonts })).warnings].map((w) => w.code);
+    expect(codes).toEqual(n === 10 ? ["FONT_NOT_IN_LINK"] : []);
   });
 });

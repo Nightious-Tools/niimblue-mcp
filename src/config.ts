@@ -9,6 +9,7 @@ export interface Config {
   appUrl: string;      // link base; http(s), no hash (makeLink appends "#load=")
   logLevel: LogLevel;
   templatesDir: string; // save_as writes here, created on first save
+  fontsDir: string;     // read-only: font files render_label may load, matched by listing (fontdir.ts)
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -21,5 +22,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     appUrl: u.href,
     logLevel: ["silent", "error", "info", "debug"].includes(lvl) ? lvl : "info",
     templatesDir: env.NIIMBLUE_TEMPLATES_DIR || join(homedir(), "Documents", "NiimBlue Templates"),
+    fontsDir: env.NIIMBLUE_FONTS_DIR || join(homedir(), "Documents", "NiimBlue Fonts"),
   };
 }

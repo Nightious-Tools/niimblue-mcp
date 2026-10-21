@@ -13,3 +13,8 @@ it("NIIMBLUE_TEMPLATES_DIR: defaults to ~/Documents/NiimBlue Templates", () => {
   expect(loadConfig({}).templatesDir).toBe(join(homedir(), "Documents", "NiimBlue Templates"));
   expect(loadConfig({ NIIMBLUE_TEMPLATES_DIR: "/x/t" }).templatesDir).toBe("/x/t");
 });
+
+it("NIIMBLUE_FONTS_DIR: defaults to ~/Documents/NiimBlue Fonts", () => {
+  expect(loadConfig({}).fontsDir).toBe(join(homedir(), "Documents", "NiimBlue Fonts"));
+  expect(loadConfig({ NIIMBLUE_FONTS_DIR: "/x/f" }).fontsDir).toBe("/x/f");
+});

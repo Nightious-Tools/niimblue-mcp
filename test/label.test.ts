@@ -42,6 +42,16 @@ describe("warnings", () => {
     expect(codes(run("D11_H", 40, 12, text("A", 30, 400)))).toEqual(["TEXT_THIN"]);
     expect(codes(run("D11_H", 40, 12, text("A", 36, 400)))).toEqual([]);
   });
+  it("TEXT_SMALL uses a built-in font's min_px, scaled with dpi", () => {
+    const mono = (fontSize: number, fontFamily = "JetBrains Mono Bold"): LabelArgs["objects"] => [{ type: "Textbox", left: 0, top: 0, width: 100, text: "A", fontSize, fontFamily }];
+    const r = run("D110", 40, 12, mono(17));
+    expect(codes(r)).toEqual(["TEXT_SMALL"]);
+    expect(r.warnings[0].message).toBe("fontSize 17 is under 18 px for JetBrains Mono Bold and prints illegibly; use fontSize 18 or more.");
+    expect(codes(run("D110", 40, 12, mono(18)))).toEqual([]);
+    expect(codes(run("D110", 40, 12, mono(16, "My Folder Font")))).toEqual([]); // not built-in: 16
+    expect(run("D11_H", 40, 12, mono(26)).warnings[0].message).toMatch(/under 26\.6 px for JetBrains Mono Bold .* use fontSize 27 /); // 18 × 11.81/8
+    expect(codes(run("D11_H", 40, 12, mono(27)))).toEqual([]);
+  });
   it("STROKE_THIN and BARCODE_MODULE_SMALL", () => {
     expect(codes(run("D110", 40, 12, [{ type: "Rect", left: 0, top: 0, width: 9, height: 9, strokeWidth: 1 }]))).toEqual(["STROKE_THIN"]);
     expect(codes(run("D110", 40, 12, [{ type: "Rect", left: 0, top: 0, width: 9, height: 9, strokeWidth: 0 }]))).toEqual([]);
@@ -95,6 +105,22 @@ describe("objects", () => {
   it("Code 128 with $ or ) is BAD_INPUT, EAN13 untouched", () => {
     bad(() => run("D110", 40, 12, [{ type: "Barcode", left: 0, top: 0, text: "A$1", encoding: "CODE128B", height: 40 }]));
     bad(() => run("D110", 40, 12, [{ type: "Barcode", left: 0, top: 0, text: "A)1", encoding: "CODE128B", height: 40 }]));
+  });
+  it("fontFamily: passes through on Textbox and Barcode, CSS-safe names only, Material Icons refused", () => {
+    const r = run("D110", 40, 12, [{ ...text("Hi ж")[0], fontFamily: "Bitter Bold" }, { type: "Barcode", left: 0, top: 0, text: "1", encoding: "CODE128B", height: 40, fontSize: 16, fontFamily: "JetBrains Mono Bold" }]);
+    expect(r.input.objects.map((o: any) => o.fontFamily)).toEqual(["Bitter Bold", "JetBrains Mono Bold"]);
+    expect(r.input.glyphs).toEqual({ 0: "Hiж" }); // the page checks other fonts' glyphs; no Noto GLYPH_FALLBACK here
+    expect(codes(r)).toEqual([]);
+    for (const f of ["a,b", '"x"', "1abc", "a  b", "x;y", "a".repeat(61)]) expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: [{ ...text("A")[0], fontFamily: f }] }).success, f).toBe(false);
+    for (const f of ["Archivo Black", "Fira_Code", "-x-y", "Шрифт Два"]) expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: [{ ...text("A")[0], fontFamily: f }] }).success, f).toBe(true);
+    expect(bad(() => run("D110", 40, 12, [{ ...text("A")[0], fontFamily: "material icons" }]))).toMatch(/use an Icon/);
+  });
+  it("a non-Noto family defaults to weight 400 and skips TEXT_THIN; Noto keeps 600", () => {
+    const r = run("D110", 40, 12, [{ ...text("A", 20)[0], fontFamily: "Bitter Bold" }, { ...text("A", 20, 400)[0], fontFamily: "Bitter Bold" }, ...text("A", 20)]);
+    expect(r.input.objects.map((o: any) => o.fontWeight)).toEqual([400, 400, 600]);
+    expect(codes(r)).toEqual([]);
+    expect(r.input.glyphs).toEqual({ 0: "A", 1: "A" });
+    expect(run("D110", 40, 12, text("A")).input.glyphs).toBeUndefined();
   });
   it("schema rejects extra keys and unknown printers", () => {
     expect(InputSchema.safeParse({ printer: "D110", width_mm: 40, height_mm: 12, objects: [{ ...rect[0], foo: 1 }] }).success).toBe(false);
