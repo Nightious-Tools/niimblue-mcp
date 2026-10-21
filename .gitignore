@@ -13,6 +13,7 @@ evals/results/
 .tmp/
 AGENTS.md
 
+.repowise/
 # repowise: the decisions manifest is meant to be committed
 !/.repowise/
 /.repowise/*
